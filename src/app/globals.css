@@ -1,0 +1,173 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =====================================================
+   المتغيرات العامة
+   ===================================================== */
+:root {
+  --color-space-950: #020408;
+  --color-space-900: #060d1a;
+  --color-space-800: #0a1628;
+  --color-ocean-400: #38bdf8;
+  --color-ocean-500: #0ea5e9;
+  --color-glow-400: #f59e0b;
+
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+/* =====================================================
+   Base Styles
+   ===================================================== */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #020408;
+  color: white;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* =====================================================
+   شريط التمرير المخصص
+   ===================================================== */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(56, 189, 248, 0.05);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.3);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.5);
+}
+
+/* =====================================================
+   شريط الـ Range (Slider)
+   ===================================================== */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 99px;
+  outline: none;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #38bdf8;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+  border: 2px solid white;
+  transition: transform 0.15s ease;
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.8);
+}
+
+/* =====================================================
+   تأثيرات الإضاءة
+   ===================================================== */
+.glow-text {
+  text-shadow: 0 0 20px rgba(56, 189, 248, 0.5);
+}
+
+.glow-border {
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.2),
+              inset 0 0 20px rgba(56, 189, 248, 0.05);
+}
+
+/* =====================================================
+   Canvas Three.js
+   ===================================================== */
+canvas {
+  display: block;
+  touch-action: none;
+}
+
+/* =====================================================
+   Animations
+   ===================================================== */
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes glowPulse {
+  0%, 100% { opacity: 0.6; }
+  50%       { opacity: 1; }
+}
+
+@keyframes orbitDot {
+  from { transform: rotate(0deg) translateX(12px); }
+  to   { transform: rotate(360deg) translateX(12px); }
+}
+
+.animate-fade-slide-in {
+  animation: fadeSlideIn 0.5s ease-out forwards;
+}
+
+.animate-glow-pulse {
+  animation: glowPulse 2s ease-in-out infinite;
+}
+
+/* =====================================================
+   خلفية النجوم (زخرفي)
+   ===================================================== */
+.stars-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(1px 1px at 15% 25%, rgba(255,255,255,0.6) 0%, transparent 100%),
+    radial-gradient(1px 1px at 85% 15%, rgba(255,255,255,0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 45% 75%, rgba(255,255,255,0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 70% 55%, rgba(255,255,255,0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 30% 85%, rgba(255,255,255,0.5) 0%, transparent 100%);
+  pointer-events: none;
+}
+
+/* =====================================================
+   نص عربي
+   ===================================================== */
+[dir="rtl"], [lang="ar"] {
+  font-family: var(--font-sans);
+  text-align: right;
+}
+
+/* =====================================================
+   Utility classes
+   ===================================================== */
+.glass {
+  background: rgba(6, 13, 26, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(56, 189, 248, 0.15);
+}
+
+.glass-hover:hover {
+  background: rgba(6, 13, 26, 0.95);
+  border-color: rgba(56, 189, 248, 0.3);
+}
