@@ -60,6 +60,10 @@ export default function ControlPanel() {
     selectMarker,
   } = useEarthStore();
 
+  const minZoomDistance = 1.3;
+  const maxZoomDistance = 7;
+  const zoomPercent = ((maxZoomDistance - zoom) / (maxZoomDistance - minZoomDistance)) * 100;
+
   // مواقع سريعة
   const quickLocations = [
     { name: "مكة", lat: 21.3891, lng: 39.8579, emoji: "🕌" },
@@ -97,21 +101,22 @@ export default function ControlPanel() {
         <div className="flex items-center justify-between mb-3">
           <span className="text-sky-300/70 text-xs font-medium">مستوى التكبير</span>
           <span className="text-sky-400 text-xs font-mono">
-            {((zoom - 1.2) / (8 - 1.2) * 100).toFixed(0)}%
+            {zoomPercent.toFixed(0)}%
           </span>
         </div>
 
         {/* شريط الزووم */}
         <input
           type="range"
-          min="1.3"
-          max="7"
+          min={minZoomDistance}
+          max={maxZoomDistance}
           step="0.1"
           value={zoom}
           onChange={(e) => setZoom(parseFloat(e.target.value))}
           className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
           style={{
-            background: `linear-gradient(to right, #38bdf8 0%, #38bdf8 ${((zoom - 1.3) / (7 - 1.3)) * 100}%, rgba(56,189,248,0.2) ${((zoom - 1.3) / (7 - 1.3)) * 100}%, rgba(56,189,248,0.2) 100%)`,
+            direction: "rtl",
+            background: `linear-gradient(to right, #38bdf8 0%, #38bdf8 ${zoomPercent}%, rgba(56,189,248,0.2) ${zoomPercent}%, rgba(56,189,248,0.2) 100%)`,
           }}
         />
 
@@ -162,7 +167,7 @@ export default function ControlPanel() {
           {quickLocations.map((loc) => (
             <button
               key={loc.name}
-              onClick={() => flyTo(loc.lat, loc.lng, 2.2)}
+              onClick={() => flyTo(loc.lat, loc.lng, 1.55)}
               className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 hover:scale-105 text-right"
               style={{
                 background: "rgba(56,189,248,0.06)",

@@ -6,7 +6,7 @@ import { Stars, Html, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { gsap } from "gsap";
 import { useEarthStore } from "@/lib/store";
-import { latLngToVector3 } from "@/lib/maps";
+import { initGoogleMaps, latLngToVector3 } from "@/lib/maps";
 import type { EarthMarker } from "@/types";
 
 function getResponsiveDistanceMultiplier(size: { width: number; height: number }) {
@@ -15,6 +15,18 @@ function getResponsiveDistanceMultiplier(size: { width: number; height: number }
   if (aspect < 0.72 || size.width < 640) return 1.55;
   if (size.width < 1024) return 1.35;
   return 1;
+}
+
+const ROAD_MAP_ENTER_DISTANCE = 1.62;
+const ROAD_MAP_EXIT_DISTANCE = 1.82;
+
+function cameraPositionToLatLng(position: THREE.Vector3) {
+  const normalized = position.clone().normalize();
+  const lat = THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(normalized.y, -1, 1)));
+  const theta = Math.atan2(normalized.z, -normalized.x);
+  const lng = ((((THREE.MathUtils.radToDeg(theta) - 180) + 540) % 360) - 180);
+
+  return { lat, lng };
 }
 
 // =====================================================
@@ -378,7 +390,158 @@ function ResponsiveCamera() {
   return null;
 }
 
-function Scene() {
+function RoadMapZoomBridge({
+  onRoadMapState,
+}: {
+  onRoadMapState: (state: { active: boolean; center: { lat: number; lng: number } }) => void;
+}) {
+  const { camera, size } = useThree();
+  const activeRef = useRef(false);
+  const lastCenterRef = useRef({ lat: 24, lng: 45 });
+  const frameRef = useRef(0);
+
+  useFrame(() => {
+    frameRef.current += 1;
+
+    const distanceMultiplier = getResponsiveDistanceMultiplier(size);
+    const distance = camera.position.length() / distanceMultiplier;
+    const shouldEnter = distance <= ROAD_MAP_ENTER_DISTANCE;
+    const shouldExit = distance >= ROAD_MAP_EXIT_DISTANCE;
+
+    if ((!activeRef.current && shouldEnter) || (activeRef.current && shouldExit)) {
+      activeRef.current = shouldEnter;
+      lastCenterRef.current = cameraPositionToLatLng(camera.position);
+      onRoadMapState({ active: activeRef.current, center: lastCenterRef.current });
+      return;
+    }
+
+    if (activeRef.current && frameRef.current % 18 === 0) {
+      const nextCenter = cameraPositionToLatLng(camera.position);
+      const moved =
+        Math.abs(nextCenter.lat - lastCenterRef.current.lat) > 0.02 ||
+        Math.abs(nextCenter.lng - lastCenterRef.current.lng) > 0.02;
+
+      if (moved) {
+        lastCenterRef.current = nextCenter;
+        onRoadMapState({ active: true, center: nextCenter });
+      }
+    }
+  });
+
+  return null;
+}
+
+function GoogleRoadMapOverlay({
+  active,
+  center,
+  onClose,
+}: {
+  active: boolean;
+  center: { lat: number; lng: number };
+  onClose: () => void;
+}) {
+  const mapElRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const markerRef = useRef<google.maps.Marker | null>(null);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!active || !mapElRef.current) return;
+
+    initGoogleMaps()
+      .then(() => {
+        if (cancelled || !mapElRef.current || !window.google?.maps) return;
+
+        if (!mapRef.current) {
+          mapRef.current = new google.maps.Map(mapElRef.current, {
+            center,
+            zoom: 16,
+            mapTypeId: google.maps.MapTypeId.ROADMAP,
+            disableDefaultUI: false,
+            fullscreenControl: false,
+            mapTypeControl: true,
+            streetViewControl: true,
+            clickableIcons: true,
+            gestureHandling: "greedy",
+          });
+
+          markerRef.current = new google.maps.Marker({
+            map: mapRef.current,
+            position: center,
+            title: "الموقع الحالي",
+          });
+        } else {
+          mapRef.current.setCenter(center);
+          mapRef.current.setZoom(Math.max(mapRef.current.getZoom() ?? 16, 15));
+          markerRef.current?.setPosition(center);
+        }
+
+        setLoadError(null);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoadError("تعذر تحميل خرائط Google. تحقق من تفعيل Maps JavaScript API والمفتاح.");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [active, center.lat, center.lng]);
+
+  return (
+    <div
+      className={`absolute inset-0 transition-opacity duration-500 ${
+        active ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+      }`}
+      style={{ zIndex: 2 }}
+      aria-hidden={!active}
+    >
+      <div ref={mapElRef} className="h-full w-full" />
+
+      <div className="absolute left-1/2 top-4 z-10 -translate-x-1/2 px-4 sm:left-auto sm:right-6 sm:translate-x-0">
+        <div
+          className="flex items-center gap-3 rounded-xl px-4 py-3 text-right shadow-2xl"
+          style={{
+            direction: "rtl",
+            background: "rgba(6,13,26,0.86)",
+            backdropFilter: "blur(16px)",
+            border: "1px solid rgba(56,189,248,0.22)",
+          }}
+        >
+          <div>
+            <div className="text-xs font-semibold text-sky-300">خريطة الطرق من Google</div>
+            <div className="mt-0.5 text-[11px] text-white/50">قرّبت كثيرًا، ظهرت الطرق والأماكن.</div>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg px-3 py-2 text-xs font-semibold text-sky-200 transition-colors hover:bg-sky-400/15"
+            style={{ border: "1px solid rgba(56,189,248,0.24)" }}
+          >
+            رجوع للأرض
+          </button>
+        </div>
+      </div>
+
+      {loadError && (
+        <div
+          className="absolute bottom-6 left-1/2 z-10 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 rounded-xl px-4 py-3 text-center text-sm text-amber-100"
+          style={{ background: "rgba(42,20,5,0.9)", border: "1px solid rgba(251,191,36,0.35)" }}
+        >
+          {loadError}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Scene({
+  onRoadMapState,
+}: {
+  onRoadMapState: (state: { active: boolean; center: { lat: number; lng: number } }) => void;
+}) {
   const { setRotating } = useEarthStore();
   const { size } = useThree();
   const distanceMultiplier = getResponsiveDistanceMultiplier(size);
@@ -386,6 +549,7 @@ function Scene() {
   return (
     <>
       <ResponsiveCamera />
+      <RoadMapZoomBridge onRoadMapState={onRoadMapState} />
 
       {/* إضاءة بيئية خافتة جداً - ضوء الشمس الحقيقي داخل EarthSphere */}
       <ambientLight intensity={0.04} color="#1a2a4a" />
@@ -429,24 +593,40 @@ function Scene() {
 // المكوّن الخارجي (Canvas)
 // =====================================================
 export default function Earth3D() {
-  const { nightMode } = useEarthStore();
+  const { nightMode, setZoom } = useEarthStore();
+  const [roadMapState, setRoadMapState] = React.useState({
+    active: false,
+    center: { lat: 24, lng: 45 },
+  });
+
   return (
-    <Canvas
-      camera={{ position: [0, 0, 2.5], fov: 42, near: 0.1, far: 1000 }}
-      gl={{
-        antialias: true,
-        alpha: false,
-        powerPreference: "high-performance",
-        toneMapping: THREE.ACESFilmicToneMapping,
-        toneMappingExposure: nightMode ? 1.0 : 1.4,
-        outputColorSpace: THREE.SRGBColorSpace,
-      }}
-      shadows
-      dpr={[1, 1.75]}
-      resize={{ scroll: false, debounce: { scroll: 50, resize: 0 } }}
-      style={{ background: "transparent", height: "100%", width: "100%" }}
-    >
-      <Scene />
-    </Canvas>
+    <div className="relative h-full w-full">
+      <Canvas
+        camera={{ position: [0, 0, 2.5], fov: 42, near: 0.1, far: 1000 }}
+        gl={{
+          antialias: true,
+          alpha: false,
+          powerPreference: "high-performance",
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: nightMode ? 1.0 : 1.4,
+          outputColorSpace: THREE.SRGBColorSpace,
+        }}
+        shadows
+        dpr={[1, 1.75]}
+        resize={{ scroll: false, debounce: { scroll: 50, resize: 0 } }}
+        style={{ background: "transparent", height: "100%", width: "100%" }}
+      >
+        <Scene onRoadMapState={setRoadMapState} />
+      </Canvas>
+
+      <GoogleRoadMapOverlay
+        active={roadMapState.active}
+        center={roadMapState.center}
+        onClose={() => {
+          setRoadMapState((state) => ({ ...state, active: false }));
+          setZoom(2.25);
+        }}
+      />
+    </div>
   );
 }
