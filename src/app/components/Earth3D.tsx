@@ -479,6 +479,7 @@ function GoogleRoadMapOverlay({
   const mapRef = useRef<google.maps.Map | null>(null);
   const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const [loadError, setLoadError] = React.useState<string | null>(null);
+  const [mapType, setMapType] = React.useState<"roadmap" | "hybrid">("roadmap");
 
   useEffect(() => {
     let cancelled = false;
@@ -494,11 +495,8 @@ function GoogleRoadMapOverlay({
             center,
             zoom: 16,
             mapId: "DEMO_MAP_ID",
-            mapTypeId: google.maps.MapTypeId.ROADMAP,
-            disableDefaultUI: false,
-            fullscreenControl: false,
-            mapTypeControl: true,
-            streetViewControl: true,
+            mapTypeId: mapType === "roadmap" ? google.maps.MapTypeId.ROADMAP : google.maps.MapTypeId.HYBRID,
+            disableDefaultUI: true,
             clickableIcons: true,
             gestureHandling: "greedy",
           });
@@ -512,6 +510,9 @@ function GoogleRoadMapOverlay({
         } else {
           mapRef.current.setCenter(center);
           mapRef.current.setZoom(Math.max(mapRef.current.getZoom() ?? 16, 15));
+          mapRef.current.setMapTypeId(
+            mapType === "roadmap" ? google.maps.MapTypeId.ROADMAP : google.maps.MapTypeId.HYBRID
+          );
           if (markerRef.current) markerRef.current.position = center;
         }
 
@@ -528,6 +529,15 @@ function GoogleRoadMapOverlay({
     };
   }, [active, center.lat, center.lng]);
 
+  // تحديث نوع الخريطة عند تغيير الحالة
+  useEffect(() => {
+    if (mapRef.current && window.google?.maps) {
+      mapRef.current.setMapTypeId(
+        mapType === "roadmap" ? google.maps.MapTypeId.ROADMAP : google.maps.MapTypeId.HYBRID
+      );
+    }
+  }, [mapType]);
+
   return (
     <div
       className={`absolute inset-0 transition-opacity duration-500 ${
@@ -540,25 +550,40 @@ function GoogleRoadMapOverlay({
 
       <div className="absolute left-1/2 top-4 z-10 -translate-x-1/2 px-4 sm:left-auto sm:right-6 sm:translate-x-0">
         <div
-          className="flex items-center gap-3 rounded-xl px-4 py-3 text-right shadow-2xl"
+          className="flex flex-col gap-3 rounded-xl p-4 text-right shadow-2xl w-64"
           style={{
             direction: "rtl",
-            background: "rgba(6,13,26,0.86)",
+            background: "rgba(6,13,26,0.88)",
             backdropFilter: "blur(16px)",
             border: "1px solid rgba(56,189,248,0.22)",
           }}
         >
           <div>
-            <div className="text-xs font-semibold text-sky-300">خريطة الطرق من Google</div>
-            <div className="mt-0.5 text-[11px] text-white/50">قرّبت كثيرًا، ظهرت الطرق والأماكن.</div>
+            <div className="text-xs font-bold text-sky-300">
+              {mapType === "roadmap" ? "خريطة الطرق من Google" : "قمر صناعي تفاعلي"}
+            </div>
+            <div className="mt-1 text-[11px] text-white/50 leading-relaxed">
+              {mapType === "roadmap"
+                ? "قرّبت كثيرًا، ظهرت الطرق والأماكن."
+                : "مظهر القمر الصناعي مع تفاصيل الطرق."}
+            </div>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg px-3 py-2 text-xs font-semibold text-sky-200 transition-colors hover:bg-sky-400/15"
-            style={{ border: "1px solid rgba(56,189,248,0.24)" }}
-          >
-            رجوع للأرض
-          </button>
+          <div className="flex gap-2 w-full pt-1 border-t border-sky-950/40">
+            <button
+              onClick={() => setMapType(mapType === "roadmap" ? "hybrid" : "roadmap")}
+              className="flex-1 rounded-lg py-2 text-center text-xs font-bold text-sky-200 transition-colors hover:bg-sky-400/15"
+              style={{ border: "1px solid rgba(56,189,248,0.24)", display: "flex", justifyContent: "center", alignItems: "center", gap: "4px" }}
+            >
+              {mapType === "roadmap" ? "🛰️ قمر صناعي" : "🗺️ خريطة طرق"}
+            </button>
+            <button
+              onClick={onClose}
+              className="flex-1 rounded-lg py-2 text-center text-xs font-bold text-sky-200 transition-colors hover:bg-sky-400/15"
+              style={{ border: "1px solid rgba(56,189,248,0.24)" }}
+            >
+              رجوع للأرض
+            </button>
+          </div>
         </div>
       </div>
 
