@@ -103,12 +103,45 @@ function LocationMarker({
   onClick: (m: EarthMarker) => void;
 }) {
   const meshRef = useRef<THREE.Mesh>(null);
+  const labelRef = useRef<HTMLDivElement>(null);
+  const { size } = useThree();
   const [x, y, z] = latLngToVector3(marker.lat, marker.lng, 1.03);
 
   useFrame((state) => {
+    // 1. نبض النقطة الرئيسية
     if (meshRef.current) {
       const pulse = Math.sin(state.clock.elapsedTime * 3) * 0.1 + 0.9;
       meshRef.current.scale.setScalar(pulse * (marker.size || 1));
+    }
+
+    // 2. تحديث حجم وظهور التسميات بناءً على مسافة الزوم (التقريب والابتعاد)
+    if (labelRef.current) {
+      const distanceMultiplier = getResponsiveDistanceMultiplier(size);
+      const normalizedDistance = state.camera.position.length() / distanceMultiplier;
+
+      let opacity = 1;
+      let scale = 1;
+
+      // عند التقريب الشديد (قريب من فتح الخريطة)
+      if (normalizedDistance < 2.0) {
+        // يتلاشى ويصغر تدريجياً بين مسافة 2.0 و 1.68
+        const t = (normalizedDistance - 1.68) / (2.0 - 1.68);
+        const clampedT = Math.max(0, Math.min(1, t));
+        opacity = clampedT;
+        scale = 0.5 + clampedT * 0.5; // يصغر حتى 50% ثم يختفي تماماً
+      }
+      // عند الابتعاد الشديد عن الأرض
+      else if (normalizedDistance > 3.5) {
+        // يتلاشى ويصغر تدريجياً بين مسافة 3.5 و 5.5
+        const t = (5.5 - normalizedDistance) / (5.5 - 3.5);
+        const clampedT = Math.max(0, Math.min(1, t));
+        opacity = clampedT;
+        scale = 0.6 + clampedT * 0.4;
+      }
+
+      labelRef.current.style.opacity = opacity.toString();
+      labelRef.current.style.transform = `scale(${scale})`;
+      labelRef.current.style.display = opacity <= 0.001 ? "none" : "block";
     }
   });
 
@@ -145,24 +178,26 @@ function LocationMarker({
 
       {/* اسم الموقع */}
       <Html
-        distanceFactor={6}
         position={[0, 0.04, 0]}
+        center
         style={{ pointerEvents: "none" }}
       >
-<div
-className="inline-flex items-center justify-center whitespace-nowrap rounded-full border px-1 py-0.5 text-[6px] font-medium leading-none"  style={{
-    background: "rgba(6,13,26,0.85)",
-    color: marker.color || "#f59e0b",
-    borderColor: marker.color || "#f59e0b",
-    backdropFilter: "blur(4px)",
-    fontFamily: "system-ui, sans-serif",
-    direction: "rtl",
-    transform: "scale(0.9)",
-    transformOrigin: "center",
-  }}
->
-  {marker.name}
-</div>
+        <div
+          ref={labelRef}
+          className="whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-bold shadow-lg"
+          style={{
+            background: "rgba(6,13,26,0.85)",
+            color: marker.color || "#f59e0b",
+            border: `1px solid ${marker.color || "#f59e0b"}`,
+            boxShadow: `0 0 10px ${(marker.color || "#f59e0b")}40`,
+            backdropFilter: "blur(8px)",
+            fontFamily: "system-ui, sans-serif",
+            direction: "rtl",
+            transformOrigin: "center bottom",
+          }}
+        >
+          {marker.name}
+        </div>
       </Html>
     </group>
   );
