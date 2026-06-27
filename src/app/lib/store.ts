@@ -5,7 +5,8 @@ import { EarthState, EarthMarker, SearchResult } from "@/types";
 
 // نقاط الاهتمام الافتراضية
 const DEFAULT_MARKERS: EarthMarker[] = [
-  { id: "mecca", lat: 21.3891, lng: 39.8579, name: "مكة المكرمة", country: "المملكة العربية السعودية", type: "landmark", color: "#f59e0b", size:1.0 },
+  { id: "mecca", lat: 21.3891, lng: 39.8579, name: "مكة المكرمة", country: "المملكة العربية السعودية", type: "landmark", color: "#f59e0b", size: 1.0 },
+  { id: "bahrain", lat: 26.0667, lng: 50.5577, name: "مملكة البحرين", country: "البحرين", type: "city", color: "#ef4444", size: 0.8 },
   { id: "dubai", lat: 25.2048, lng: 55.2708, name: "دبي", country: "الإمارات", type: "city", color: "#38bdf8", size: 0.7 },
   { id: "riyadh", lat: 24.7136, lng: 46.6753, name: "الرياض", country: "المملكة العربية السعودية", type: "city", color: "#38bdf8", size: 0.7 },
   { id: "cairo", lat: 30.0444, lng: 31.2357, name: "القاهرة", country: "مصر", type: "city", color: "#38bdf8", size: 0.7 },

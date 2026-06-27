@@ -1,7 +1,7 @@
 "use client";
 
 import { Loader } from "@googlemaps/js-api-loader";
-import { SearchResult, GeoLocation } from "@/types";
+import { SearchResult, GeoLocation, PlaceDetails, RouteResult, RouteStep } from "@/types";
 
 let loader: Loader | null = null;
 let geocoder: google.maps.Geocoder | null = null;
@@ -28,6 +28,7 @@ export async function initGoogleMaps(): Promise<void> {
   await loader.importLibrary("maps");
   await loader.importLibrary("places");
   await loader.importLibrary("geocoding");
+  await loader.importLibrary("routes");
 
   geocoder = new google.maps.Geocoder();
   isLoaded = true;
@@ -80,7 +81,7 @@ export async function geocodeAddress(
 
   return new Promise((resolve) => {
     geocoder!.geocode({ address, language: "ar" }, (results: google.maps.GeocoderResult[] | null, status: any) => {
-      if (status === google.maps.GeocoderStatus.OK && results?.[0]) {
+      if (status === "OK" && results?.[0]) {
         const loc = results[0].geometry.location;
         resolve({
           lat: loc.lat(),
@@ -91,6 +92,166 @@ export async function geocodeAddress(
         resolve(null);
       }
     });
+  });
+}
+
+// =====================================================
+// جلب تفاصيل مكان محدد (Places API الجديد)
+// =====================================================
+export async function fetchPlaceDetails(placeId: string): Promise<PlaceDetails | null> {
+  if (!isLoaded) await initGoogleMaps();
+  if (!isLoaded) return null;
+
+  try {
+    const { Place } = await google.maps.importLibrary("places") as google.maps.PlacesLibrary;
+
+    const place = new Place({ id: placeId });
+
+    await place.fetchFields({
+      fields: [
+        "id",
+        "displayName",
+        "formattedAddress",
+        "location",
+        "rating",
+        "userRatingCount",
+        "photos",
+        "nationalPhoneNumber",
+        "websiteURI",
+        "regularOpeningHours",
+        "types",
+        "priceLevel",
+      ],
+    });
+
+    // جلب صور المكان (أول 5 صور)
+    const photos: { url: string; attribution?: string }[] = [];
+    if (place.photos && place.photos.length > 0) {
+      const photoSlice = place.photos.slice(0, 5);
+      for (const photo of photoSlice) {
+        try {
+          const url = photo.getURI({ maxWidth: 800, maxHeight: 600 });
+          photos.push({ url });
+        } catch {
+          // تجاهل صور فاشلة
+        }
+      }
+    }
+
+    // ساعات العمل
+    const openingHours: string[] = [];
+    if (place.regularOpeningHours?.weekdayDescriptions) {
+      openingHours.push(...place.regularOpeningHours.weekdayDescriptions);
+    }
+
+    let openNow: boolean | undefined = undefined;
+    try {
+      openNow = await place.isOpen();
+    } catch {
+      // تجاهل إن لم يدعم المتصفح/المفتاح
+    }
+
+    return {
+      placeId: place.id || placeId,
+      name: place.displayName || "",
+      address: place.formattedAddress || "",
+      rating: place.rating ?? undefined,
+      userRatingsTotal: place.userRatingCount ?? undefined,
+      photos,
+      phone: place.nationalPhoneNumber ?? undefined,
+      website: place.websiteURI ?? undefined,
+      openNow,
+      openingHours,
+      types: place.types || [],
+      location: {
+        lat: place.location?.lat() || 0,
+        lng: place.location?.lng() || 0,
+      },
+      priceLevel: place.priceLevel ? Number(place.priceLevel) : undefined,
+    };
+  } catch (err) {
+    console.warn("خطأ في جلب تفاصيل المكان:", err);
+    return null;
+  }
+}
+
+// =====================================================
+// حساب المسار (Directions API الكلاسيكي)
+// =====================================================
+export async function calculateRoute(
+  origin: google.maps.LatLngLiteral,
+  destination: google.maps.LatLngLiteral,
+  travelMode: "DRIVING" | "WALKING"
+): Promise<{ result: RouteResult; response: google.maps.DirectionsResult } | null> {
+  if (!isLoaded) await initGoogleMaps();
+  if (!isLoaded) return null;
+
+  return new Promise((resolve) => {
+    const service = new google.maps.DirectionsService();
+
+    service.route(
+      {
+        origin,
+        destination,
+        travelMode:
+          travelMode === "DRIVING"
+            ? google.maps.TravelMode.DRIVING
+            : google.maps.TravelMode.WALKING,
+        language: "ar",
+        unitSystem: google.maps.UnitSystem.METRIC,
+      },
+      (response, status) => {
+        if (status !== google.maps.DirectionsStatus.OK || !response) {
+          console.warn("خطأ في حساب المسار:", status);
+          resolve(null);
+          return;
+        }
+
+        const leg = response.routes[0]?.legs[0];
+        if (!leg) { resolve(null); return; }
+
+        const steps: RouteStep[] = leg.steps.map((step) => ({
+          instructions: step.instructions.replace(/<[^>]*>/g, ""),
+          distance: step.distance?.text || "",
+          duration: step.duration?.text || "",
+          travelMode,
+        }));
+
+        resolve({
+          result: {
+            distance: leg.distance?.text || "",
+            duration: leg.duration?.text || "",
+            travelMode,
+            steps,
+          },
+          response,
+        });
+      }
+    );
+  });
+}
+
+// =====================================================
+// Reverse Geocoding: إحداثيات → عنوان
+// =====================================================
+export async function reverseGeocode(
+  lat: number,
+  lng: number
+): Promise<string> {
+  if (!isLoaded) await initGoogleMaps();
+  if (!geocoder) return `${lat.toFixed(5)}°, ${lng.toFixed(5)}°`;
+
+  return new Promise((resolve) => {
+    geocoder!.geocode(
+      { location: { lat, lng }, language: "ar" },
+      (results, status) => {
+        if (status === google.maps.GeocoderStatus.OK && results?.[0]) {
+          resolve(results[0].formatted_address);
+        } else {
+          resolve(`${lat.toFixed(5)}°, ${lng.toFixed(5)}°`);
+        }
+      }
+    );
   });
 }
 

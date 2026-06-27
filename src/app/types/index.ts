@@ -28,6 +28,58 @@ export interface SearchResult {
   photoUrl?: string;
 }
 
+// =====================================================
+// معلومات المكان التفصيلية (Places API)
+// =====================================================
+export interface PlacePhoto {
+  url: string;
+  attribution?: string;
+}
+
+export interface PlaceDetails {
+  placeId: string;
+  name: string;
+  address: string;
+  rating?: number;
+  userRatingsTotal?: number;
+  photos: PlacePhoto[];
+  phone?: string;
+  website?: string;
+  openNow?: boolean;
+  openingHours?: string[];
+  types: string[];
+  location: GeoLocation;
+  priceLevel?: number; // 0-4
+}
+
+// =====================================================
+// الدبوس الذي يضعه المستخدم
+// =====================================================
+export interface DroppedPin {
+  lat: number;
+  lng: number;
+  address?: string;
+  placeId?: string;
+}
+
+// =====================================================
+// نتيجة حساب المسار (Directions API)
+// =====================================================
+export interface RouteStep {
+  instructions: string;
+  distance: string;
+  duration: string;
+  travelMode: "DRIVING" | "WALKING";
+}
+
+export interface RouteResult {
+  distance: string;       // "5.2 كم"
+  duration: string;       // "12 دقيقة"
+  travelMode: "DRIVING" | "WALKING";
+  steps: RouteStep[];
+  polyline?: string;      // encoded polyline للرسم
+}
+
 export interface EarthState {
   // حالة الكرة
   isRotating: boolean;
