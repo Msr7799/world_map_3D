@@ -1,5 +1,7 @@
 # 🌍 Earth3D Explorer
 
+![Earth3D Explorer](public/earth3d.png)
+
 تطبيق Next.js لاستكشاف الكرة الأرضية ثلاثية الأبعاد بشكل تفاعلي.
 
 ---

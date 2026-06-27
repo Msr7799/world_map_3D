@@ -4,7 +4,6 @@ import { Loader } from "@googlemaps/js-api-loader";
 import { SearchResult, GeoLocation } from "@/types";
 
 let loader: Loader | null = null;
-let placesService: google.maps.places.PlacesService | null = null;
 let geocoder: google.maps.Geocoder | null = null;
 let isLoaded = false;
 
@@ -21,58 +20,55 @@ export async function initGoogleMaps(): Promise<void> {
   loader = new Loader({
     apiKey,
     version: "weekly",
-    libraries: ["places", "geocoding"],
     language: "ar",
     region: "SA",
   });
 
-  await loader.load();
+  // تحميل المكتبات المطلوبة
+  await loader.importLibrary("maps");
+  await loader.importLibrary("places");
+  await loader.importLibrary("geocoding");
 
-  // تهيئة الـ Services
-  const mapDiv = document.createElement("div");
-  const tempMap = new google.maps.Map(mapDiv, {
-    center: { lat: 24, lng: 45 },
-    zoom: 2,
-  });
-
-  placesService = new google.maps.places.PlacesService(tempMap);
   geocoder = new google.maps.Geocoder();
   isLoaded = true;
 }
 
-// البحث عن مواقع
+// البحث عن مواقع باستخدام Place API الجديد
 export async function searchPlaces(query: string): Promise<SearchResult[]> {
   if (!isLoaded) await initGoogleMaps();
-  if (!placesService) return getMockResults(query);
+  if (!isLoaded) return getMockResults(query);
 
-  return new Promise((resolve) => {
-    const request: google.maps.places.TextSearchRequest = {
-      query,
+  try {
+    const { Place } = await google.maps.importLibrary("places") as google.maps.PlacesLibrary;
+
+    const request = {
+      textQuery: query,
+      fields: ["id", "displayName", "formattedAddress", "location", "types", "rating"],
       language: "ar",
+      maxResultCount: 5,
     };
 
-    placesService!.textSearch(request, (results: google.maps.places.PlaceResult[] | null, status: any) => {
-      if (
-        status === google.maps.places.PlacesServiceStatus.OK &&
-        results
-      ) {
-        const mapped: SearchResult[] = results.slice(0, 5).map((place: google.maps.places.PlaceResult) => ({
-          placeId: place.place_id || "",
-          name: place.name || "",
-          formattedAddress: place.formatted_address || "",
-          location: {
-            lat: place.geometry?.location?.lat() || 0,
-            lng: place.geometry?.location?.lng() || 0,
-          },
-          types: place.types || [],
-          rating: place.rating,
-        }));
-        resolve(mapped);
-      } else {
-        resolve(getMockResults(query));
-      }
-    });
-  });
+    const { places } = await Place.searchByText(request);
+
+    if (places && places.length > 0) {
+      return places.map((place) => ({
+        placeId: place.id || "",
+        name: place.displayName || "",
+        formattedAddress: place.formattedAddress || "",
+        location: {
+          lat: place.location?.lat() || 0,
+          lng: place.location?.lng() || 0,
+        },
+        types: place.types || [],
+        rating: place.rating !== null ? place.rating : undefined,
+      }));
+    }
+
+    return getMockResults(query);
+  } catch (err) {
+    console.warn("خطأ في البحث عن الأماكن:", err);
+    return getMockResults(query);
+  }
 }
 
 // Geocoding: تحويل اسم المكان إلى إحداثيات

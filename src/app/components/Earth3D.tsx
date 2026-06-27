@@ -271,7 +271,7 @@ function EarthSphere() {
         ref={sunLightRef}
         position={sunPos}
         intensity={0.7}
-        color="#4f51d1a8"
+        color="#fffaf0"
         castShadow
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
@@ -442,7 +442,7 @@ function GoogleRoadMapOverlay({
 }) {
   const mapElRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
-  const markerRef = useRef<google.maps.Marker | null>(null);
+  const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const [loadError, setLoadError] = React.useState<string | null>(null);
 
   useEffect(() => {
@@ -451,13 +451,14 @@ function GoogleRoadMapOverlay({
     if (!active || !mapElRef.current) return;
 
     initGoogleMaps()
-      .then(() => {
+      .then(async () => {
         if (cancelled || !mapElRef.current || !window.google?.maps) return;
 
         if (!mapRef.current) {
           mapRef.current = new google.maps.Map(mapElRef.current, {
             center,
             zoom: 16,
+            mapId: "DEMO_MAP_ID",
             mapTypeId: google.maps.MapTypeId.ROADMAP,
             disableDefaultUI: false,
             fullscreenControl: false,
@@ -467,7 +468,8 @@ function GoogleRoadMapOverlay({
             gestureHandling: "greedy",
           });
 
-          markerRef.current = new google.maps.Marker({
+          const { AdvancedMarkerElement } = await google.maps.importLibrary("marker") as google.maps.MarkerLibrary;
+          markerRef.current = new AdvancedMarkerElement({
             map: mapRef.current,
             position: center,
             title: "الموقع الحالي",
@@ -475,7 +477,7 @@ function GoogleRoadMapOverlay({
         } else {
           mapRef.current.setCenter(center);
           mapRef.current.setZoom(Math.max(mapRef.current.getZoom() ?? 16, 15));
-          markerRef.current?.setPosition(center);
+          if (markerRef.current) markerRef.current.position = center;
         }
 
         setLoadError(null);
