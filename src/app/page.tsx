@@ -7,6 +7,7 @@ import { gsap } from "gsap";
 import SearchPanel from "@/components/SearchPanel";
 import ControlPanel from "@/components/ControlPanel";
 import MarkerInfo from "@/components/MarkerInfo";
+import { useEarthStore } from "@/lib/store";
 
 // تحميل مكوّن Three.js على جانب العميل فقط
 const Earth3D = dynamic(() => import("@/components/Earth3D"), {
@@ -67,6 +68,10 @@ function LoadingScreen() {
 
 // مكوّن الهيدر
 function Header() {
+  const isMapActive = useEarthStore((state) => state.isMapActive);
+
+  if (isMapActive) return null;
+
   return (
     <motion.header
       initial={{ opacity: 0, y: -20 }}
@@ -117,6 +122,8 @@ function Header() {
 }
 
 export default function HomePage() {
+  const isMapActive = useEarthStore((state) => state.isMapActive);
+
   return (
     <main
       className="relative min-h-[100svh] w-screen overflow-hidden"
@@ -141,12 +148,14 @@ export default function HomePage() {
         <Header />
 
         {/* منطقة التحكم (يمين) */}
-        <div
-          className="absolute bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-4 z-20 max-h-[34svh] w-[min(14rem,calc(100vw-2rem))] overflow-y-auto overscroll-contain pointer-events-auto sm:top-24 sm:bottom-auto sm:right-6 sm:max-h-[calc(100svh-8rem)] sm:w-auto"
-          style={{ direction: "rtl" }}
-        >
-          <ControlPanel />
-        </div>
+        {!isMapActive && (
+          <div
+            className="absolute bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-4 z-20 max-h-[34svh] w-[min(14rem,calc(100vw-2rem))] overflow-y-auto overscroll-contain pointer-events-auto sm:top-24 sm:bottom-auto sm:right-6 sm:max-h-[calc(100svh-8rem)] sm:w-auto"
+            style={{ direction: "rtl" }}
+          >
+            <ControlPanel />
+          </div>
+        )}
 
         {/* البحث (يسار) */}
         <motion.div
@@ -159,18 +168,20 @@ export default function HomePage() {
           <SearchPanel />
 
           {/* تلميحات */}
-          <div
-            className="mt-3 px-3 py-2 rounded-xl text-right"
-            style={{
-              background: "rgba(6,13,26,0.7)",
-              backdropFilter: "blur(12px)",
-              border: "1px solid rgba(56,189,248,0.1)",
-            }}
-          >
-            <p className="text-sky-300/40 text-xs" style={{ direction: "rtl" }}>
-              💡 اسحب للدوران · انقر للتكبير
-            </p>
-          </div>
+          {!isMapActive && (
+            <div
+              className="mt-3 px-3 py-2 rounded-xl text-right"
+              style={{
+                background: "rgba(6,13,26,0.7)",
+                backdropFilter: "blur(12px)",
+                border: "1px solid rgba(56,189,248,0.1)",
+              }}
+            >
+              <p className="text-sky-300/40 text-xs" style={{ direction: "rtl" }}>
+                💡 اسحب للدوران · انقر للتكبير
+              </p>
+            </div>
+          )}
         </motion.div>
 
         {/* معلومات الموقع المختار */}

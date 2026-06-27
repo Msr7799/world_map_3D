@@ -50,6 +50,7 @@ export interface EarthState {
   showClouds: boolean;
   showGrid: boolean;
   nightMode: boolean;
+  isMapActive: boolean;
 
   // Actions
   setRotating: (rotating: boolean) => void;
@@ -64,6 +65,7 @@ export interface EarthState {
   toggleClouds: () => void;
   toggleGrid: () => void;
   toggleNightMode: () => void;
+  setMapActive: (active: boolean) => void;
 }
 
 export interface CameraState {

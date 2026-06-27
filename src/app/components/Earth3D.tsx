@@ -655,11 +655,16 @@ function Scene({
 // المكوّن الخارجي (Canvas)
 // =====================================================
 export default function Earth3D() {
-  const { nightMode, setZoom } = useEarthStore();
+  const { nightMode, setZoom, setMapActive } = useEarthStore();
   const [roadMapState, setRoadMapState] = React.useState({
     active: false,
     center: { lat: 24, lng: 45 },
   });
+
+  // مزامنة حالة الخريطة مع المخزن العام لإخفاء الشعار (Logo) عند فتح الخريطة
+  React.useEffect(() => {
+    setMapActive(roadMapState.active);
+  }, [roadMapState.active, setMapActive]);
 
   return (
     <div className="relative h-full w-full">
