@@ -9,6 +9,14 @@ import { SearchResult } from "@/types";
 type TabType = "search" | "coords" | "location";
 
 export default function SearchPanel() {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsCollapsed(window.innerWidth < 768);
+    }
+  }, []);
+
   const [activeTab, setActiveTab] = useState<TabType>("search");
 
   // --- Search Tab ---
@@ -184,8 +192,32 @@ export default function SearchPanel() {
     { id: "location", label: "موقعي",    icon: "🛰️" },
   ];
 
+  if (isCollapsed) {
+    return (
+      <div className="relative w-full flex justify-end">
+        <button
+          onClick={() => setIsCollapsed(false)}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-full transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-sky-950/40 pointer-events-auto"
+          style={{
+            background: "rgba(6,13,26,0.92)",
+            backdropFilter: "blur(20px)",
+            border: "1px solid rgba(56,189,248,0.35)",
+            color: "#38bdf8",
+            fontFamily: "'Cairo', 'Tajawal', sans-serif",
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+            direction: "rtl",
+          }}
+        >
+          <span>🔍 البحث والاستكشاف</span>
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="relative w-full max-w-sm">
+    <div className="relative w-full max-w-sm pointer-events-auto">
       <div
         style={{
           background: "rgba(6,13,26,0.88)",
@@ -198,24 +230,34 @@ export default function SearchPanel() {
       >
         {/* تبويبات */}
         <div
-          className="flex"
+          className="flex items-center justify-between"
           style={{ borderBottom: "1px solid rgba(56,189,248,0.12)" }}
         >
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className="flex-1 py-2.5 text-xs font-semibold transition-all duration-200"
-              style={{
-                direction: "rtl",
-                color: activeTab === tab.id ? "#38bdf8" : "rgba(148,163,184,0.6)",
-                background: activeTab === tab.id ? "rgba(56,189,248,0.08)" : "transparent",
-                borderBottom: activeTab === tab.id ? "2px solid #38bdf8" : "2px solid transparent",
-              }}
-            >
-              {tab.icon} {tab.label}
-            </button>
-          ))}
+          <div className="flex flex-1">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className="flex-1 py-2.5 text-xs font-semibold transition-all duration-200"
+                style={{
+                  direction: "rtl",
+                  color: activeTab === tab.id ? "#38bdf8" : "rgba(148,163,184,0.6)",
+                  background: activeTab === tab.id ? "rgba(56,189,248,0.08)" : "transparent",
+                  borderBottom: activeTab === tab.id ? "2px solid #38bdf8" : "2px solid transparent",
+                }}
+              >
+                {tab.icon} {tab.label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setIsCollapsed(true)}
+            className="px-3.5 py-2.5 text-sky-400/70 hover:text-sky-300 transition-colors text-xs font-bold"
+            title="طي لوحة البحث"
+            style={{ borderLeft: "1px solid rgba(56,189,248,0.12)" }}
+          >
+            ▲ طي
+          </button>
         </div>
 
         <div className="p-3">

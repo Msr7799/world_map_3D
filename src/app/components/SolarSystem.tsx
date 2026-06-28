@@ -632,6 +632,7 @@ function PlanetCard({
   planet: PlanetDef | "sun";
   onBack: () => void;
 }) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const isSun = planet === "sun";
   const p = isSun ? null : (planet as PlanetDef);
   const color = isSun ? "#ff8800" : p!.color;
@@ -669,7 +670,7 @@ function PlanetCard({
           className="px-5 py-3 flex items-center gap-3"
           style={{
             background: `linear-gradient(90deg, ${color}22 0%, transparent 100%)`,
-            borderBottom: `1px solid ${color}20`,
+            borderBottom: isCollapsed ? "none" : `1px solid ${color}20`,
           }}
         >
           <div
@@ -684,55 +685,71 @@ function PlanetCard({
               {nameEn}
             </span>
           </div>
-          <button
-            onClick={onBack}
-            className="text-xs px-3 py-1.5 rounded-lg transition-all hover:scale-105 active:scale-95 flex-shrink-0"
-            style={{
-              background: "rgba(255,255,255,0.06)",
-              border: "1px solid rgba(255,255,255,0.12)",
-              color: "rgba(200,210,230,0.7)",
-            }}
-          >
-            ← رجوع
-          </button>
-        </div>
-
-        {/* Facts */}
-        <div className="px-5 py-4 space-y-2" style={{ direction: "rtl" }}>
-          {facts.map((f, i) => (
-            <div key={i} className="flex items-start gap-2.5">
-              <div
-                className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0"
-                style={{ background: color }}
-              />
-              <p className="text-sm leading-relaxed" style={{ color: "rgba(200,215,235,0.82)" }}>
-                {f}
-              </p>
-            </div>
-          ))}
-        </div>
-
-        {/* Tips */}
-        <div
-          className="px-5 py-2.5 flex gap-3 flex-wrap"
-          style={{
-            borderTop: "1px solid rgba(255,255,255,0.06)",
-            direction: "rtl",
-          }}
-        >
-          {["🖱️ اسحب للتدوير", "🔍 عجلة للتكبير / تصغير"].map((t) => (
-            <span
-              key={t}
-              className="text-xs px-2 py-1 rounded-md"
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <button
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className="text-xs px-2.5 py-1.5 rounded-lg transition-all hover:scale-105 active:scale-95"
               style={{
-                background: `${color}12`,
-                color: `${color}cc`,
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                color: "rgba(200,210,230,0.7)",
               }}
             >
-              {t}
-            </span>
-          ))}
+              {isCollapsed ? "▼ تفاصيل" : "▲ طي"}
+            </button>
+            <button
+              onClick={onBack}
+              className="text-xs px-3 py-1.5 rounded-lg transition-all hover:scale-105 active:scale-95"
+              style={{
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                color: "rgba(200,210,230,0.7)",
+              }}
+            >
+              ← رجوع
+            </button>
+          </div>
         </div>
+
+        {/* Facts & Tips */}
+        {!isCollapsed && (
+          <>
+            <div className="px-5 py-4 space-y-2" style={{ direction: "rtl" }}>
+              {facts.map((f, i) => (
+                <div key={i} className="flex items-start gap-2.5">
+                  <div
+                    className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0"
+                    style={{ background: color }}
+                  />
+                  <p className="text-sm leading-relaxed" style={{ color: "rgba(200,215,235,0.82)" }}>
+                    {f}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div
+              className="px-5 py-2.5 flex gap-3 flex-wrap"
+              style={{
+                borderTop: "1px solid rgba(255,255,255,0.06)",
+                direction: "rtl",
+              }}
+            >
+              {["🖱️ اسحب للتدوير", "🔍 عجلة للتكبير / تصغير"].map((t) => (
+                <span
+                  key={t}
+                  className="text-xs px-2 py-1 rounded-md"
+                  style={{
+                    background: `${color}12`,
+                    color: `${color}cc`,
+                  }}
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </motion.div>
   );

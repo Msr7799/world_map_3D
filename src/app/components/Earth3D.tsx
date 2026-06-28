@@ -880,6 +880,13 @@ export default function Earth3D() {
   const [roadMapState, setRoadMapState] = React.useState({ active: false, center: { lat: 24, lng: 45 } });
   const [selectedPlanet, setSelectedPlanet] = useState<SelectedPlanet | null>(null);
   const [arrived, setArrived] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsSidebarCollapsed(window.innerWidth < 768);
+    }
+  }, []);
 
   React.useEffect(() => { setMapActive(roadMapState.active); }, [roadMapState.active, setMapActive]);
 
@@ -910,73 +917,120 @@ export default function Earth3D() {
       </Canvas>
 
       {/* ── قائمة الكواكب الجانبية (شريط التنقل) ── */}
-      <div
-        style={{
-          position: "absolute",
-          top: "50%",
-          left: 20,
-          transform: "translateY(-50%)",
-          zIndex: 30,
-          display: "flex",
-          flexDirection: "column",
-          gap: 6,
-          background: "rgba(10, 16, 32, 0.65)",
-          backdropFilter: "blur(16px)",
-          padding: "14px 10px",
-          borderRadius: 20,
-          border: "1px solid rgba(255, 255, 255, 0.08)",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.45)",
-          maxHeight: "85vh",
-          overflowY: "auto",
-        }}
-      >
-        <div style={{ color: "#a5b4fc", fontSize: 11, fontWeight: "bold", textAlign: "center", marginBottom: 8, fontFamily: "'Cairo', sans-serif", letterSpacing: 0.5 }}>
-          كواكب المجموعة
-        </div>
-        {PLANETS_LIST.map((planet) => {
-          const isSelected = selectedPlanet?.nameAr === planet.nameAr;
-          return (
+      {isSidebarCollapsed ? (
+        <button
+          onClick={() => setIsSidebarCollapsed(false)}
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: 16,
+            transform: "translateY(-50%)",
+            zIndex: 30,
+            background: "rgba(10, 16, 32, 0.85)",
+            backdropFilter: "blur(16px)",
+            padding: "12px",
+            borderRadius: "50%",
+            border: "1px solid rgba(255, 255, 255, 0.15)",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.45)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 44,
+            height: 44,
+            transition: "transform 0.2s, background 0.2s",
+          }}
+          title="عرض كواكب المجموعة"
+          onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-50%) scale(1.1)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(-50%) scale(1)"; }}
+        >
+          <span style={{ fontSize: 18 }}>🪐</span>
+        </button>
+      ) : (
+        <div
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: 16,
+            transform: "translateY(-50%)",
+            zIndex: 30,
+            display: "flex",
+            flexDirection: "column",
+            gap: 6,
+            background: "rgba(10, 16, 32, 0.8)",
+            backdropFilter: "blur(20px)",
+            padding: "14px 10px",
+            borderRadius: 20,
+            border: "1px solid rgba(255, 255, 255, 0.12)",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.45)",
+            maxHeight: "80vh",
+            overflowY: "auto",
+            width: 140,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, padding: "0 4px" }}>
+            <span style={{ color: "#a5b4fc", fontSize: 11, fontWeight: "bold", fontFamily: "'Cairo', sans-serif" }}>
+              الكواكب
+            </span>
             <button
-              key={planet.nameEn}
-              onClick={() => handlePlanetClick(planet.nameAr, planet.radius)}
+              onClick={() => setIsSidebarCollapsed(true)}
               style={{
-                background: isSelected ? "rgba(99,102,241,0.22)" : "rgba(255,255,255,0.02)",
-                border: isSelected ? "1px solid rgba(129,140,248,0.45)" : "1px solid rgba(255,255,255,0.04)",
-                borderRadius: 10,
-                padding: "8px 14px",
-                color: isSelected ? "#e0e7ff" : "#94a3b8",
-                fontSize: 13,
-                fontFamily: "'Cairo', 'Tajawal', sans-serif",
+                background: "transparent",
+                border: "none",
+                color: "#94a3b8",
+                fontSize: 10,
                 cursor: "pointer",
-                textAlign: "right",
-                transition: "all 0.2s",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                minWidth: 105,
+                padding: "2px 4px",
               }}
-              onMouseEnter={(e) => {
-                if (!isSelected) {
-                  e.currentTarget.style.background = "rgba(255,255,255,0.08)";
-                  e.currentTarget.style.color = "#fff";
-                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isSelected) {
-                  e.currentTarget.style.background = "rgba(255,255,255,0.02)";
-                  e.currentTarget.style.color = "#94a3b8";
-                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.04)";
-                }
-              }}
+              title="طي القائمة"
             >
-              <span>{planet.nameAr}</span>
-              <span style={{ fontSize: 14 }}>{planet.icon}</span>
+              ◀ طي
             </button>
-          );
-        })}
-      </div>
+          </div>
+          {PLANETS_LIST.map((planet) => {
+            const isSelected = selectedPlanet?.nameAr === planet.nameAr;
+            return (
+              <button
+                key={planet.nameEn}
+                onClick={() => handlePlanetClick(planet.nameAr, planet.radius)}
+                style={{
+                  background: isSelected ? "rgba(99,102,241,0.22)" : "rgba(255,255,255,0.02)",
+                  border: isSelected ? "1px solid rgba(129,140,248,0.45)" : "1px solid rgba(255,255,255,0.04)",
+                  borderRadius: 10,
+                  padding: "8px 12px",
+                  color: isSelected ? "#e0e7ff" : "#94a3b8",
+                  fontSize: 12,
+                  fontFamily: "'Cairo', 'Tajawal', sans-serif",
+                  cursor: "pointer",
+                  textAlign: "right",
+                  transition: "all 0.2s",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 8,
+                }}
+                onMouseEnter={(e) => {
+                  if (!isSelected) {
+                    e.currentTarget.style.background = "rgba(255,255,255,0.08)";
+                    e.currentTarget.style.color = "#fff";
+                    e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)";
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isSelected) {
+                    e.currentTarget.style.background = "rgba(255,255,255,0.02)";
+                    e.currentTarget.style.color = "#94a3b8";
+                    e.currentTarget.style.borderColor = "rgba(255,255,255,0.04)";
+                  }
+                }}
+              >
+                <span>{planet.nameAr}</span>
+                <span style={{ fontSize: 14 }}>{planet.icon}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* ── HUD: اسم الكوكب + زر الرجوع ── */}
       {selectedPlanet && (

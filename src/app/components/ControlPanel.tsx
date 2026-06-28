@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useEarthStore } from "@/lib/store";
 
@@ -42,6 +43,14 @@ function Toggle({ label, value, icon, onToggle }: ToggleProps) {
 }
 
 export default function ControlPanel() {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsCollapsed(window.innerWidth < 768);
+    }
+  }, []);
+
   const {
     isRotating,
     zoom,
@@ -74,6 +83,30 @@ export default function ControlPanel() {
     { name: "القطب الشمالي", lat: 90, lng: 0, emoji: "🧊" },
   ];
 
+  if (isCollapsed) {
+    return (
+      <div className="flex justify-end w-full">
+        <button
+          onClick={() => setIsCollapsed(false)}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-full transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-sky-950/40"
+          style={{
+            background: "rgba(6,13,26,0.92)",
+            backdropFilter: "blur(20px)",
+            border: "1px solid rgba(56,189,248,0.35)",
+            color: "#38bdf8",
+            fontFamily: "'Cairo', 'Tajawal', sans-serif",
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+            direction: "rtl",
+          }}
+        >
+          <span>⚙️ خيارات التحكم</span>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, x: 20 }}
@@ -82,12 +115,19 @@ export default function ControlPanel() {
       className="flex flex-col gap-3 w-56"
     >
       {/* عنوان اللوحة */}
-      <div className="px-1">
+      <div className="px-1 flex items-center justify-between">
         <h2 className="text-sky-400 text-xs font-bold uppercase tracking-[0.2em] mb-0.5">
           لوحة التحكم
         </h2>
-        <div className="h-px bg-gradient-to-r from-sky-400/30 to-transparent" />
+        <button
+          onClick={() => setIsCollapsed(true)}
+          className="text-sky-400/70 hover:text-sky-300 transition-colors text-xs font-bold px-2"
+          title="طي لوحة التحكم"
+        >
+          ▲ طي
+        </button>
       </div>
+      <div className="h-px bg-gradient-to-r from-sky-400/30 to-transparent" />
 
       {/* زووم */}
       <div
