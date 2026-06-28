@@ -225,13 +225,28 @@ function ResponsiveCamera() {
   return null;
 }
 
-function RoadMapZoomBridge({ onRoadMapState }: { onRoadMapState: (s: { active: boolean; center: { lat: number; lng: number } }) => void }) {
+function RoadMapZoomBridge({
+  onRoadMapState,
+  selectedPlanet,
+}: {
+  onRoadMapState: (s: { active: boolean; center: { lat: number; lng: number } }) => void;
+  selectedPlanet: SelectedPlanet | null;
+}) {
   const { camera, size } = useThree();
   const activeRef = useRef(false);
   const lastCenterRef = useRef({ lat: 24, lng: 45 });
   const frameRef = useRef(0);
 
   useFrame(() => {
+    // لا تقم بتفعيل خريطة الطرق إذا كان المستخدم يتصفح كوكباً آخر غير الأرض
+    if (selectedPlanet && selectedPlanet.nameAr !== "الأرض") {
+      if (activeRef.current) {
+        activeRef.current = false;
+        onRoadMapState({ active: false, center: lastCenterRef.current });
+      }
+      return;
+    }
+
     frameRef.current += 1;
     const dm = getResponsiveDistanceMultiplier(size);
     const distance = camera.position.length() / dm;
@@ -841,7 +856,7 @@ function Scene({
   return (
     <>
       <ResponsiveCamera />
-      <RoadMapZoomBridge onRoadMapState={onRoadMapState} />
+      <RoadMapZoomBridge onRoadMapState={onRoadMapState} selectedPlanet={selectedPlanet} />
       <ambientLight intensity={0.04} color="#1a2a4a" />
       <SkyBox />
       <Stars radius={600} depth={80} count={5000} factor={4} saturation={0.1} fade speed={0.3} />
@@ -917,7 +932,7 @@ export default function Earth3D() {
       </Canvas>
 
       {/* ── قائمة الكواكب الجانبية (شريط التنقل) ── */}
-      {isSidebarCollapsed ? (
+      {!roadMapState.active && (isSidebarCollapsed ? (
         <button
           onClick={() => setIsSidebarCollapsed(false)}
           style={{
@@ -1030,10 +1045,10 @@ export default function Earth3D() {
             );
           })}
         </div>
-      )}
+      ))}
 
       {/* ── HUD: اسم الكوكب + زر الرجوع ── */}
-      {selectedPlanet && (
+      {!roadMapState.active && selectedPlanet && (
         <div
           style={{
             position: "absolute",

@@ -105,20 +105,22 @@ function Header() {
       </div>
 
       {/* Solar System link + حالة الاتصال */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         <Link
           href="/"
-          className="hidden items-center gap-2 rounded-full px-3 py-1.5 text-xs sm:flex transition-all hover:scale-105 active:scale-95"
+          className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] sm:px-3 sm:py-1.5 sm:text-xs transition-all hover:scale-105 active:scale-95"
           style={{
-            background: "rgba(255,100,0,0.15)",
+            background: "rgba(255,100,0,0.18)",
             backdropFilter: "blur(12px)",
-            border: "1px solid rgba(255,150,0,0.3)",
-            color: "rgba(255,180,80,0.9)",
+            border: "1px solid rgba(255,150,0,0.35)",
+            color: "rgba(255,180,80,0.95)",
             direction: "rtl",
             textDecoration: "none",
+            fontFamily: "'Cairo', sans-serif",
           }}
         >
-          🪐 المجموعة الشمسية
+          🪐 <span className="hidden min-[380px]:inline">المجموعة الشمسية</span>
+          <span className="inline min-[380px]:hidden">المجموعة</span>
         </Link>
         <div
           className="hidden items-center gap-2 rounded-full px-3 py-1.5 text-xs sm:flex"
