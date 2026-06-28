@@ -123,6 +123,7 @@ function Header() {
 
 export default function HomePage() {
   const isMapActive = useEarthStore((state) => state.isMapActive);
+  const isRouteActive = useEarthStore((state) => state.isRouteActive);
 
   return (
     <main
@@ -158,36 +159,40 @@ export default function HomePage() {
         )}
 
         {/* البحث (يسار) */}
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className="absolute inset-x-4 top-20 z-20 pointer-events-auto sm:inset-x-auto sm:left-6 sm:top-24 sm:w-[min(24rem,calc(100vw-3rem))]"
-          style={{ direction: "rtl" }}
-        >
-          <SearchPanel />
+        {!isRouteActive && (
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="absolute inset-x-4 top-20 z-20 pointer-events-auto sm:inset-x-auto sm:left-6 sm:top-24 sm:w-[min(24rem,calc(100vw-3rem))]"
+            style={{ direction: "rtl" }}
+          >
+            <SearchPanel />
 
-          {/* تلميحات */}
-          {!isMapActive && (
-            <div
-              className="mt-3 px-3 py-2 rounded-xl text-right"
-              style={{
-                background: "rgba(6,13,26,0.7)",
-                backdropFilter: "blur(12px)",
-                border: "1px solid rgba(56,189,248,0.1)",
-              }}
-            >
-              <p className="text-sky-300/40 text-xs" style={{ direction: "rtl" }}>
-                💡 اسحب للدوران · انقر للتكبير
-              </p>
-            </div>
-          )}
-        </motion.div>
+            {/* تلميحات */}
+            {!isMapActive && (
+              <div
+                className="mt-3 px-3 py-2 rounded-xl text-right"
+                style={{
+                  background: "rgba(6,13,26,0.7)",
+                  backdropFilter: "blur(12px)",
+                  border: "1px solid rgba(56,189,248,0.1)",
+                }}
+              >
+                <p className="text-sky-300/40 text-xs" style={{ direction: "rtl" }}>
+                  💡 اسحب للدوران · انقر للتكبير
+                </p>
+              </div>
+            )}
+          </motion.div>
+        )}
 
         {/* معلومات الموقع المختار */}
-        <div className="absolute inset-x-0 bottom-0 pointer-events-auto">
-          <MarkerInfo />
-        </div>
+        {!isMapActive && (
+          <div className="absolute inset-x-0 bottom-0 pointer-events-auto">
+            <MarkerInfo />
+          </div>
+        )}
       </div>
 
       {/* تأثير الضوء المحيطي */}

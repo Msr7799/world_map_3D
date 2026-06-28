@@ -35,6 +35,7 @@ export const useEarthStore = create<EarthState>((set: (partial: Partial<EarthSta
   showGrid: false,
   nightMode: false,
   isMapActive: false,
+  isRouteActive: false,
 
   // Actions
   setRotating: (rotating) => set({ isRotating: rotating }),
@@ -77,5 +78,10 @@ export const useEarthStore = create<EarthState>((set: (partial: Partial<EarthSta
   toggleNightMode: () =>
     set((state) => ({ nightMode: !state.nightMode })),
 
-  setMapActive: (active) => set({ isMapActive: active }),
+  setMapActive: (active) => set((state) => ({
+    isMapActive: active,
+    isRouteActive: active ? state.isRouteActive : false
+  })),
+
+  setRouteActive: (active) => set({ isRouteActive: active }),
 }));

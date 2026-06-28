@@ -261,12 +261,19 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
+  // ربط store لتزامن حالة RoutePanel مع باقي الواجهة
+  const setRouteActive = useEarthStore((s) => s.setRouteActive);
+
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [mapType, setMapType] = React.useState<"roadmap" | "hybrid">("roadmap");
   const [placeDetails, setPlaceDetails] = React.useState<PlaceDetails | null>(null);
   const [isLoadingPlace, setIsLoadingPlace] = React.useState(false);
   const [droppedPin, setDroppedPin] = React.useState<DroppedPin | null>(null);
   const [showRoutePanel, setShowRoutePanel] = React.useState(false);
+
+  // فتح/إغلاق لوحة المسار مع تزامن الـ store
+  const openRoutePanel = () => { setShowRoutePanel(true); setRouteActive(true); };
+  const closeRoutePanel = () => { setShowRoutePanel(false); setRouteActive(false); };
 
   // ── وضع دبوس في الموقع ──
   const dropPin = async (map: google.maps.Map, lat: number, lng: number) => {
@@ -282,7 +289,7 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
     setDroppedPin({ lat, lng, address });
     setPlaceDetails(null);
     setIsLoadingPlace(false);
-    setShowRoutePanel(false);
+    closeRoutePanel();
   };
 
   // ── إنشاء الخريطة ──
@@ -310,7 +317,7 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
         map.addListener("click", async (e: google.maps.MapMouseEvent & { placeId?: string }) => {
           if (e.placeId) e.stop?.();
           if (e.placeId) {
-            setIsLoadingPlace(true); setPlaceDetails(null); setShowRoutePanel(false);
+            setIsLoadingPlace(true); setPlaceDetails(null); closeRoutePanel();
             try {
               const details = await fetchPlaceDetails(e.placeId);
               if (!cancelled) setPlaceDetails(details);
@@ -369,6 +376,24 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
   const handleTouchEnd = () => { if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; } };
   const handleTouchMove = () => { if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; } };
 
+  // تنظيف الحالة عند إغلاق الخريطة
+  useEffect(() => {
+    if (!active) {
+      setPlaceDetails(null);
+      setIsLoadingPlace(false);
+      setDroppedPin(null);
+      closeRoutePanel();
+      if (droppedPinMarkerRef.current) {
+        droppedPinMarkerRef.current.map = null;
+        droppedPinMarkerRef.current = null;
+      }
+      if (directionsRendererRef.current) {
+        directionsRendererRef.current.setDirections({ routes: [] } as unknown as google.maps.DirectionsResult);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+
   // حساب المسار
   const handleRequestRoute = async (origin: { lat: number; lng: number }, destination: { lat: number; lng: number }, mode: "DRIVING" | "WALKING"): Promise<RouteResult | null> => {
     if (!mapRef.current || !directionsRendererRef.current) return null;
@@ -382,7 +407,7 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
     if (directionsRendererRef.current) {
       directionsRendererRef.current.setDirections({ routes: [] } as unknown as google.maps.DirectionsResult);
     }
-    setShowRoutePanel(false);
+    closeRoutePanel();
   };
 
   const closePinPanel = () => {
@@ -425,11 +450,11 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
 
       {/* لوحة معلومات المكان */}
       {(isLoadingPlace || placeDetails) && (
-        <PlaceInfoPanel details={placeDetails} isLoading={isLoadingPlace} onClose={() => { setPlaceDetails(null); setIsLoadingPlace(false); }} onNavigate={() => setShowRoutePanel(true)} />
+        <PlaceInfoPanel details={placeDetails} isLoading={isLoadingPlace} onClose={() => { setPlaceDetails(null); setIsLoadingPlace(false); }} onNavigate={openRoutePanel} />
       )}
 
       {/* لوحة الدبوس */}
-      {droppedPin && !showRoutePanel && !placeDetails && (
+      {droppedPin && !showRoutePanel && !placeDetails && !isLoadingPlace && (
         <div className="absolute bottom-4 left-1/2 z-30" style={{ transform: "translateX(-50%)", width: "min(380px, calc(100vw - 2rem))", direction: "rtl" }}>
           <div className="rounded-2xl p-4 space-y-3" style={{ background: "rgba(5,10,22,0.94)", backdropFilter: "blur(28px)", border: "1px solid rgba(99,102,241,0.3)", boxShadow: "0 24px 80px rgba(0,0,0,0.7)" }}>
             <div className="flex items-center justify-between">
@@ -455,7 +480,7 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
                 <p className="text-white font-mono text-sm font-bold">{droppedPin.lng.toFixed(4)}°</p>
               </div>
             </div>
-            <button onClick={() => setShowRoutePanel(true)} className="w-full py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-95" style={{ background: "linear-gradient(135deg, #6366f1, #0ea5e9)", boxShadow: "0 4px 20px rgba(99,102,241,0.35)" }}>
+            <button onClick={openRoutePanel} className="w-full py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-95" style={{ background: "linear-gradient(135deg, #6366f1, #0ea5e9)", boxShadow: "0 4px 20px rgba(99,102,241,0.35)" }}>
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
               احسب الطريق إلى هنا
             </button>
