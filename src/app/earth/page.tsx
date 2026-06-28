@@ -183,7 +183,7 @@ export default function EarthPage() {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
-            className="absolute inset-x-4 top-20 z-20 pointer-events-auto sm:inset-x-auto sm:left-6 sm:top-24 sm:w-[min(24rem,calc(100vw-3rem))]"
+            className="absolute inset-x-4 top-20 z-20 pointer-events-none sm:inset-x-auto sm:left-6 sm:top-24 sm:w-[min(24rem,calc(100vw-3rem))]"
             style={{ direction: "rtl" }}
           >
             <SearchPanel />
