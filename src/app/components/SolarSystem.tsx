@@ -827,16 +827,16 @@ function Header({ onReset }: { onReset: () => void }) {
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="absolute top-0 inset-x-0 z-30 flex items-center justify-between px-5 pt-4 pb-6"
+      className="absolute top-0 inset-x-0 z-30 flex items-center justify-between px-3 sm:px-5 pt-3 sm:pt-4 pb-6"
       style={{
         background:
           "linear-gradient(to bottom, rgba(2,5,14,0.95) 0%, transparent 100%)",
         pointerEvents: "none",
       }}
     >
-      <div className="flex items-center gap-3" style={{ pointerEvents: "auto" }}>
+      <div className="flex items-center gap-2 sm:gap-3" style={{ pointerEvents: "auto" }}>
         <div
-          className="w-10 h-10 rounded-xl flex items-center justify-center text-xl"
+          className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center text-lg sm:text-xl"
           style={{
             background: "linear-gradient(135deg, #ff6600 0%, #ff9900 100%)",
             boxShadow: "0 0 24px rgba(255,110,0,0.55)",
@@ -846,36 +846,38 @@ function Header({ onReset }: { onReset: () => void }) {
         </div>
         <div>
           <h1
-            className="text-white font-bold text-base leading-none"
-            style={{ direction: "rtl" }}
+            className="text-white font-bold text-xs sm:text-base leading-none"
+            style={{ direction: "rtl", fontFamily: "'Cairo', sans-serif" }}
           >
             المجموعة الشمسية
           </h1>
-          <p className="text-xs mt-0.5 font-mono" style={{ color: "rgba(160,180,220,0.45)" }}>
+          <p className="text-[9px] sm:text-xs mt-0.5 font-mono hidden min-[400px]:block" style={{ color: "rgba(160,180,220,0.45)" }}>
             Solar System 3D Explorer
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-2" style={{ pointerEvents: "auto" }}>
+      <div className="flex items-center gap-1.5 sm:gap-2" style={{ pointerEvents: "auto" }}>
         <Link
           href="/earth"
-          className="text-xs px-3.5 py-2 rounded-xl transition-all hover:scale-105 active:scale-95 text-decoration-none"
+          className="text-[10px] sm:text-xs px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-lg sm:rounded-xl transition-all hover:scale-105 active:scale-95 text-decoration-none"
           style={{
             background: "rgba(56,189,248,0.15)",
             border: "1px solid rgba(56,189,248,0.3)",
             color: "rgba(14,165,233,0.9)",
+            fontFamily: "'Cairo', sans-serif",
           }}
         >
-          🌍 خريطة الأرض 3D
+          🌍 الأرض 3D
         </Link>
         <button
           onClick={onReset}
-          className="text-xs px-3.5 py-2 rounded-xl transition-all hover:scale-105 active:scale-95"
+          className="text-[10px] sm:text-xs px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-lg sm:rounded-xl transition-all hover:scale-105 active:scale-95"
           style={{
             background: "rgba(255,255,255,0.06)",
             border: "1px solid rgba(255,255,255,0.1)",
             color: "rgba(190,210,240,0.7)",
+            fontFamily: "'Cairo', sans-serif",
           }}
         >
           🌌 عرض كامل
