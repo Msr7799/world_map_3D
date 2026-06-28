@@ -6,7 +6,7 @@ const SolarSystem = dynamic(() => import("@/components/SolarSystem"), {
   ssr: false,
   loading: () => (
     <div
-      className="w-screen h-screen flex flex-col items-center justify-center gap-6"
+      className="w-full h-screen flex flex-col items-center justify-center gap-6"
       style={{ background: "#010208" }}
     >
       <div
@@ -18,13 +18,13 @@ const SolarSystem = dynamic(() => import("@/components/SolarSystem"), {
         }}
       />
       <p style={{ color: "rgba(200,210,230,0.5)", fontSize: "0.875rem" }}>
-        جارٍ تحميل المجموعة الشمسية ثلاثية الأبعاد...
+        جارٍ تحميل المجموعة الشمسية...
       </p>
     </div>
   ),
 });
 
-export default function HomePage() {
+export default function SolarSystemPage() {
   return (
     <main className="w-screen h-screen overflow-hidden" style={{ background: "#010208" }}>
       <SolarSystem />

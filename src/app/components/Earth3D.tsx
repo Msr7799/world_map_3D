@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useRef, useEffect, Suspense } from "react";
+import React, { useRef, useEffect, Suspense, useState, useCallback } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Stars, Html, OrbitControls } from "@react-three/drei";
+import { Stars, Html, OrbitControls, useTexture } from "@react-three/drei";
 import * as THREE from "three";
 import { gsap } from "gsap";
 import { useEarthStore } from "@/lib/store";
@@ -130,7 +130,7 @@ function getSunPosition(): THREE.Vector3 {
   return new THREE.Vector3(x, y, z).multiplyScalar(-10);
 }
 
-function EarthSphere() {
+function EarthSphere({ onEarthClick }: { onEarthClick: (nameAr: string, radius: number) => void }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const cloudsRef = useRef<THREE.Mesh>(null);
   const groupRef = useRef<THREE.Group>(null);
@@ -155,18 +155,22 @@ function EarthSphere() {
     gsap.to(camera.position, { x: tx, y: ty, z: tz, duration: 1.8, ease: "power2.inOut" });
   }, [currentLat, currentLng, zoom, camera, size.height, size.width]);
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     if (groupRef.current && isRotating) groupRef.current.rotation.y += delta * (rotationSpeed * 0.05);
     if (cloudsRef.current) cloudsRef.current.rotation.y += delta * 0.012;
-    if (sunLightRef.current) sunLightRef.current.position.copy(getSunPosition());
+    // توجيه إضاءة الشمس على الأرض بالتزامن مع حركة الشمس المرئية في الفضاء
+    const t = state.clock.elapsedTime * 0.05;
+    const sunX = -Math.cos(t) * 30;
+    const sunZ = -Math.sin(t) * 30;
+    if (sunLightRef.current) sunLightRef.current.position.set(sunX, 0, sunZ);
   });
 
   const sunPos = React.useMemo(() => getSunPosition(), []);
 
   return (
-    <group ref={groupRef}>
+    <group ref={groupRef} name="الأرض">
       <directionalLight ref={sunLightRef} position={sunPos} intensity={0.7} color="#fffaf0" castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
-      <mesh ref={meshRef} castShadow receiveShadow>
+      <mesh ref={meshRef} castShadow receiveShadow onClick={(e) => { e.stopPropagation(); onEarthClick("الأرض", 1.0); }}>
         <sphereGeometry args={[1, 128, 128]} />
         {dayTexture ? <meshBasicMaterial map={dayTexture} /> : <meshStandardMaterial color="#2a7fc4" roughness={0.8} metalness={0.0} />}
       </mesh>
@@ -502,20 +506,371 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
   );
 }
 
-function Scene({ onRoadMapState }: { onRoadMapState: (s: { active: boolean; center: { lat: number; lng: number } }) => void }) {
+// ─── قائمة الكواكب للتنقل السريع ──────────────────────────────────────────────
+const PLANETS_LIST = [
+  { nameEn: "sun", nameAr: "الشمس", radius: 7.5, icon: "☀️" },
+  { nameEn: "mercury", nameAr: "عطارد", radius: 0.55, icon: "🪐" },
+  { nameEn: "venus", nameAr: "الزهرة", radius: 1.2, icon: "🪐" },
+  { nameEn: "earth", nameAr: "الأرض", radius: 1.0, icon: "🌍" },
+  { nameEn: "moon", nameAr: "القمر", radius: 0.40, icon: "🌙" },
+  { nameEn: "mars", nameAr: "المريخ", radius: 0.72, icon: "🪐" },
+  { nameEn: "jupiter", nameAr: "المشتري", radius: 3.5, icon: "🪐" },
+  { nameEn: "saturn", nameAr: "زحل", radius: 3.0, icon: "🪐" },
+  { nameEn: "uranus", nameAr: "أورانوس", radius: 2.0, icon: "🪐" },
+  { nameEn: "neptune", nameAr: "نبتون", radius: 1.9, icon: "🪐" },
+];
+
+// ─── نوع الكوكب المحدد ───────────────────────────────────────────────────────
+interface SelectedPlanet {
+  nameAr: string;
+  radius: number;
+}
+
+// ─── easing ─────────────────────────────────────────────────────────────────
+function easeInOutCubic(t: number) {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+// ─── FlyToCamera: تحريك الكاميرا للطيران نحو الكوكب بالاسم ───────────────────
+function FlyToCamera({
+  targetName,
+  distance,
+  onArrived,
+  ctrlRef,
+}: {
+  targetName: string | null;
+  distance: number;
+  onArrived: () => void;
+  ctrlRef: React.RefObject<any>;
+}) {
+  const { camera, scene } = useThree();
+  const flyingRef   = useRef(false);
+  const doneRef     = useRef(false);
+  const progressRef = useRef(0);
+  const startCam    = useRef(new THREE.Vector3());
+  const endCam      = useRef(new THREE.Vector3());
+  const startTarget = useRef(new THREE.Vector3());
+  const endTarget   = useRef(new THREE.Vector3());
+
+  useEffect(() => {
+    if (!targetName) return;
+    const obj = scene.getObjectByName(targetName);
+    if (!obj) return;
+
+    const wp = new THREE.Vector3();
+    obj.getWorldPosition(wp);
+
+    flyingRef.current   = true;
+    doneRef.current     = false;
+    progressRef.current = 0;
+    startCam.current.copy(camera.position);
+    startTarget.current.copy(ctrlRef.current?.target ?? new THREE.Vector3());
+    endTarget.current.copy(wp);
+
+    const dir = camera.position.clone().sub(wp).normalize();
+    if (dir.lengthSq() < 0.001) dir.set(0, 0.5, 1).normalize();
+    endCam.current.copy(wp).addScaledVector(dir, distance);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetName]);
+
+  useFrame((_, dt) => {
+    if (!flyingRef.current || !targetName) return;
+    const obj = scene.getObjectByName(targetName);
+    if (!obj) return;
+
+    const wp = new THREE.Vector3();
+    obj.getWorldPosition(wp);
+    endTarget.current.copy(wp);
+
+    progressRef.current = Math.min(progressRef.current + dt * 0.75, 1);
+    const e = easeInOutCubic(progressRef.current);
+    camera.position.lerpVectors(startCam.current, endCam.current, e);
+    if (ctrlRef.current) {
+      ctrlRef.current.target.lerpVectors(startTarget.current, endTarget.current, e);
+      ctrlRef.current.update();
+    }
+    if (progressRef.current >= 1 && !doneRef.current) {
+      doneRef.current   = true;
+      flyingRef.current = false;
+      onArrived();
+    }
+  });
+
+  return null;
+}
+
+// ─── حلقات زحل ───────────────────────────────────────────────────────────────
+function SaturnRings({ inner, outer, texture }: { inner: number; outer: number; texture: THREE.Texture }) {
+  const geom = React.useMemo(() => {
+    const g = new THREE.RingGeometry(inner, outer, 96, 4);
+    const pos = g.attributes.position as THREE.BufferAttribute;
+    const uv = g.attributes.uv as THREE.BufferAttribute;
+    const v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i);
+      const r = v.length();
+      uv.setXY(i, (r - inner) / (outer - inner), 1);
+    }
+    uv.needsUpdate = true;
+    return g;
+  }, [inner, outer]);
+  return (
+    <mesh geometry={geom} rotation={[-Math.PI / 2, 0, 0]}>
+      <meshBasicMaterial map={texture} side={THREE.DoubleSide} transparent opacity={0.88} depthWrite={false} />
+    </mesh>
+  );
+}
+
+// ─── خط المدار ───────────────────────────────────────────────────────────────
+function OrbitPath({ radius }: { radius: number }) {
+  const line = React.useMemo(() => {
+    const pts: THREE.Vector3[] = [];
+    for (let i = 0; i <= 160; i++) {
+      const a = (i / 160) * Math.PI * 2;
+      pts.push(new THREE.Vector3(Math.cos(a) * radius, 0, Math.sin(a) * radius));
+    }
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    const mat = new THREE.LineBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.07 });
+    return new THREE.Line(geo, mat);
+  }, [radius]);
+  return <primitive object={line} />;
+}
+
+// ─── كواكب المجموعة الشمسية ──────────────────────────────────────────────────
+function SolarSystemOverlay({
+  onPlanetClick,
+  frozenPlanet,
+}: {
+  onPlanetClick: (nameAr: string, radius: number) => void;
+  frozenPlanet: string | null;
+}) {
+  const sunGroupRef = useRef<THREE.Group>(null);
+  const sunMeshRef  = useRef<THREE.Mesh>(null);
+  const mercuryRef  = useRef<THREE.Mesh>(null);
+  const venusGroupRef = useRef<THREE.Group>(null);
+  const venusMeshRef  = useRef<THREE.Mesh>(null);
+  const moonRef     = useRef<THREE.Mesh>(null);
+  const marsRef     = useRef<THREE.Mesh>(null);
+  const jupiterRef  = useRef<THREE.Mesh>(null);
+  const saturnGroupRef = useRef<THREE.Group>(null);
+  const saturnMeshRef  = useRef<THREE.Mesh>(null);
+  const uranusRef   = useRef<THREE.Mesh>(null);
+  const neptuneRef  = useRef<THREE.Mesh>(null);
+
+  const tex = useTexture({
+    sun:       "/textures/sun.jpg",
+    mercury:   "/textures/mercury.jpg",
+    venus:     "/textures/venus_surface.jpg",
+    venusAtm:  "/textures/venus_atmosphere.jpg",
+    moon:      "/textures/moon.jpg",
+    mars:      "/textures/mars.jpg",
+    jupiter:   "/textures/jupiter.jpg",
+    saturn:    "/textures/saturn.jpg",
+    saturnRing:"/textures/saturn_ring_alpha.png",
+    uranus:    "/textures/uranus.jpg",
+    neptune:   "/textures/neptune.jpg",
+  });
+
+  useFrame((state) => {
+    if (frozenPlanet) return;
+    const t = state.clock.elapsedTime * 0.05;
+
+    // الشمس تدور حول الأرض (الأرض ثابتة عند 0,0,0)
+    const sunX = -Math.cos(t) * 30;
+    const sunZ = -Math.sin(t) * 30;
+
+    if (sunGroupRef.current) sunGroupRef.current.position.set(sunX, 0, sunZ);
+    if (sunMeshRef.current)  sunMeshRef.current.rotation.y  += 0.003;
+
+    // عطارد
+    const mA = t * 4.1;
+    if (mercuryRef.current) {
+      mercuryRef.current.position.set(sunX + Math.cos(mA) * 6, 0, sunZ + Math.sin(mA) * 6);
+      mercuryRef.current.rotation.y += 0.005;
+    }
+    // الزهرة
+    const vA = t * 1.6;
+    if (venusGroupRef.current) venusGroupRef.current.position.set(sunX + Math.cos(vA) * 10, 0, sunZ + Math.sin(vA) * 10);
+    if (venusMeshRef.current)  venusMeshRef.current.rotation.y += 0.003;
+
+    // القمر (يدور حول الأرض)
+    const moA = t * 1.3;
+    if (moonRef.current) {
+      moonRef.current.position.set(Math.cos(moA) * 2.0, 0.05, Math.sin(moA) * 2.0);
+      // الدوران الذاتي المتزامن (Tidal Locking): وجه القمر نفسه يواجه الأرض دائماً
+      moonRef.current.lookAt(0, 0.05, 0);
+    }
+    // المريخ
+    const maA = t * 0.53;
+    if (marsRef.current) {
+      marsRef.current.position.set(sunX + Math.cos(maA) * 40, 0, sunZ + Math.sin(maA) * 40);
+      marsRef.current.rotation.y += 0.008;
+    }
+    // المشتري
+    const jA = t * 0.08;
+    if (jupiterRef.current) {
+      jupiterRef.current.position.set(sunX + Math.cos(jA) * 58, 0, sunZ + Math.sin(jA) * 58);
+      jupiterRef.current.rotation.y += 0.02;
+    }
+    // زحل
+    const sA = t * 0.034;
+    if (saturnGroupRef.current) saturnGroupRef.current.position.set(sunX + Math.cos(sA) * 76, 0, sunZ + Math.sin(sA) * 76);
+    if (saturnMeshRef.current)  saturnMeshRef.current.rotation.y += 0.018;
+
+    // أورانوس
+    const uA = t * 0.012;
+    if (uranusRef.current) {
+      uranusRef.current.position.set(sunX + Math.cos(uA) * 94, 0, sunZ + Math.sin(uA) * 94);
+      uranusRef.current.rotation.y += 0.012;
+    }
+    // نبتون
+    const nA = t * 0.006;
+    if (neptuneRef.current) {
+      neptuneRef.current.position.set(sunX + Math.cos(nA) * 112, 0, sunZ + Math.sin(nA) * 112);
+      neptuneRef.current.rotation.y += 0.015;
+    }
+  });
+
+  return (
+    <group>
+      {/* ── الشمس ── */}
+      <group ref={sunGroupRef}>
+        <mesh ref={sunMeshRef} name="الشمس" onClick={(e) => { e.stopPropagation(); onPlanetClick("الشمس", 7.5); }}>
+          <sphereGeometry args={[7.5, 64, 64]} />
+          <meshBasicMaterial map={tex.sun} />
+        </mesh>
+        {/* هالة الشمس */}
+        <mesh scale={[1.06, 1.06, 1.06]}>
+          <sphereGeometry args={[7.5, 32, 32]} />
+          <meshBasicMaterial color="#ff7700" transparent opacity={0.09} side={THREE.BackSide} />
+        </mesh>
+        <mesh scale={[1.14, 1.14, 1.14]}>
+          <sphereGeometry args={[7.5, 32, 32]} />
+          <meshBasicMaterial color="#ff3300" transparent opacity={0.04} side={THREE.BackSide} />
+        </mesh>
+        {/* ضوء الشمس */}
+        <pointLight intensity={4} color="#fffaf0" distance={260} decay={0.5} />
+        {/* مسارات المدارات (مركزها الشمس) */}
+        <OrbitPath radius={6} />
+        <OrbitPath radius={10} />
+        <OrbitPath radius={30} />
+        <OrbitPath radius={40} />
+        <OrbitPath radius={58} />
+        <OrbitPath radius={76} />
+        <OrbitPath radius={94} />
+        <OrbitPath radius={112} />
+      </group>
+
+      {/* ── عطارد ── */}
+      <mesh ref={mercuryRef} name="عطارد" onClick={(e) => { e.stopPropagation(); onPlanetClick("عطارد", 0.55); }}>
+        <sphereGeometry args={[0.55, 32, 32]} />
+        <meshStandardMaterial map={tex.mercury} roughness={0.8} />
+      </mesh>
+
+      {/* ── الزهرة ── */}
+      <group ref={venusGroupRef} name="الزهرة" onClick={(e) => { e.stopPropagation(); onPlanetClick("الزهرة", 1.2); }}>
+        <mesh ref={venusMeshRef}>
+          <sphereGeometry args={[1.2, 32, 32]} />
+          <meshStandardMaterial map={tex.venus} roughness={0.7} />
+        </mesh>
+        <mesh scale={[1.02, 1.02, 1.02]}>
+          <sphereGeometry args={[1.2, 32, 32]} />
+          <meshStandardMaterial map={tex.venusAtm} transparent opacity={0.3} side={THREE.FrontSide} depthWrite={false} />
+        </mesh>
+      </group>
+
+      {/* ── القمر (حول الأرض) ── */}
+      <OrbitPath radius={2.0} />
+      <mesh ref={moonRef} name="القمر" onClick={(e) => { e.stopPropagation(); onPlanetClick("القمر", 0.40); }}>
+        <sphereGeometry args={[0.40, 32, 32]} />
+        <meshStandardMaterial map={tex.moon} roughness={0.9} />
+      </mesh>
+
+      {/* ── المريخ ── */}
+      <mesh ref={marsRef} name="المريخ" onClick={(e) => { e.stopPropagation(); onPlanetClick("المريخ", 0.72); }}>
+        <sphereGeometry args={[0.72, 32, 32]} />
+        <meshStandardMaterial map={tex.mars} roughness={0.8} />
+      </mesh>
+
+      {/* ── المشتري ── */}
+      <mesh ref={jupiterRef} name="المشتري" onClick={(e) => { e.stopPropagation(); onPlanetClick("المشتري", 3.5); }}>
+        <sphereGeometry args={[3.5, 64, 64]} />
+        <meshStandardMaterial map={tex.jupiter} roughness={0.7} />
+      </mesh>
+
+      {/* ── زحل + حلقاته ── */}
+      <group ref={saturnGroupRef} name="زحل" rotation={[0.47, 0, 0]} onClick={(e) => { e.stopPropagation(); onPlanetClick("زحل", 3.0); }}>
+        <mesh ref={saturnMeshRef}>
+          <sphereGeometry args={[3.0, 64, 64]} />
+          <meshStandardMaterial map={tex.saturn} roughness={0.8} />
+        </mesh>
+        <SaturnRings inner={4.0} outer={7.2} texture={tex.saturnRing} />
+      </group>
+
+      {/* ── أورانوس ── */}
+      <mesh ref={uranusRef} name="أورانوس" onClick={(e) => { e.stopPropagation(); onPlanetClick("أورانوس", 2.0); }}>
+        <sphereGeometry args={[2.0, 64, 64]} />
+        <meshStandardMaterial map={tex.uranus} roughness={0.7} />
+      </mesh>
+
+      {/* ── نبتون ── */}
+      <mesh ref={neptuneRef} name="نبتون" onClick={(e) => { e.stopPropagation(); onPlanetClick("نبتون", 1.9); }}>
+        <sphereGeometry args={[1.9, 64, 64]} />
+        <meshStandardMaterial map={tex.neptune} roughness={0.7} />
+      </mesh>
+    </group>
+  );
+}
+
+function Scene({
+  onRoadMapState,
+  selectedPlanet,
+  onPlanetClick,
+  onArrived,
+}: {
+  onRoadMapState: (s: { active: boolean; center: { lat: number; lng: number } }) => void;
+  selectedPlanet: SelectedPlanet | null;
+  onPlanetClick: (nameAr: string, radius: number) => void;
+  onArrived: () => void;
+}) {
   const { setRotating } = useEarthStore();
   const { size } = useThree();
   const distanceMultiplier = getResponsiveDistanceMultiplier(size);
+  const ctrlRef = useRef<any>(null);
+
   return (
     <>
       <ResponsiveCamera />
       <RoadMapZoomBridge onRoadMapState={onRoadMapState} />
       <ambientLight intensity={0.04} color="#1a2a4a" />
-      <pointLight position={[-8, -4, -8]} intensity={0.06} color="#0a1530" />
       <SkyBox />
-      <Stars radius={300} depth={60} count={2000} factor={3} saturation={0.5} fade speed={0.3} />
-      <Suspense fallback={null}><EarthSphere /></Suspense>
-      <OrbitControls enablePan={false} enableZoom={true} enableRotate={true} minDistance={1.45 * distanceMultiplier} maxDistance={8 * distanceMultiplier} zoomSpeed={0.8} rotateSpeed={0.5} autoRotate={false} onStart={() => setRotating(false)} />
+      <Stars radius={600} depth={80} count={5000} factor={4} saturation={0.1} fade speed={0.3} />
+      <Suspense fallback={null}><EarthSphere onEarthClick={onPlanetClick} /></Suspense>
+      <Suspense fallback={null}>
+        <SolarSystemOverlay
+          onPlanetClick={onPlanetClick}
+          frozenPlanet={selectedPlanet?.nameAr ?? null}
+        />
+      </Suspense>
+      <FlyToCamera
+        targetName={selectedPlanet?.nameAr ?? null}
+        distance={(selectedPlanet?.radius ?? 1) * 6}
+        onArrived={onArrived}
+        ctrlRef={ctrlRef}
+      />
+      <OrbitControls
+        ref={ctrlRef}
+        enablePan={true}
+        enableZoom={true}
+        enableRotate={true}
+        minDistance={0.3}
+        maxDistance={280 * distanceMultiplier}
+        zoomSpeed={0.9}
+        rotateSpeed={0.5}
+        panSpeed={0.5}
+        autoRotate={false}
+        onStart={() => setRotating(false)}
+      />
     </>
   );
 }
@@ -523,19 +878,174 @@ function Scene({ onRoadMapState }: { onRoadMapState: (s: { active: boolean; cent
 export default function Earth3D() {
   const { nightMode, setZoom, setMapActive } = useEarthStore();
   const [roadMapState, setRoadMapState] = React.useState({ active: false, center: { lat: 24, lng: 45 } });
+  const [selectedPlanet, setSelectedPlanet] = useState<SelectedPlanet | null>(null);
+  const [arrived, setArrived] = useState(false);
 
   React.useEffect(() => { setMapActive(roadMapState.active); }, [roadMapState.active, setMapActive]);
+
+  const handlePlanetClick = useCallback((nameAr: string, radius: number) => {
+    setSelectedPlanet({ nameAr, radius });
+    setArrived(false);
+  }, []);
+
+  const handleReset = useCallback(() => {
+    setSelectedPlanet(null);
+    setArrived(false);
+  }, []);
 
   return (
     <div className="relative h-full w-full">
       <Canvas
-        camera={{ position: [0, 0, 2.5], fov: 42, near: 0.1, far: 1000 }}
+        camera={{ position: [0, 0, 2.5], fov: 42, near: 0.1, far: 2000 }}
         gl={{ antialias: true, alpha: false, powerPreference: "high-performance", toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: nightMode ? 1.0 : 1.4, outputColorSpace: THREE.SRGBColorSpace }}
         shadows dpr={[1, 1.75]} resize={{ scroll: false, debounce: { scroll: 50, resize: 0 } }}
         style={{ background: "transparent", height: "100%", width: "100%" }}
       >
-        <Scene onRoadMapState={setRoadMapState} />
+        <Scene
+          onRoadMapState={setRoadMapState}
+          selectedPlanet={selectedPlanet}
+          onPlanetClick={handlePlanetClick}
+          onArrived={() => setArrived(true)}
+        />
       </Canvas>
+
+      {/* ── قائمة الكواكب الجانبية (شريط التنقل) ── */}
+      <div
+        style={{
+          position: "absolute",
+          top: "50%",
+          left: 20,
+          transform: "translateY(-50%)",
+          zIndex: 30,
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+          background: "rgba(10, 16, 32, 0.65)",
+          backdropFilter: "blur(16px)",
+          padding: "14px 10px",
+          borderRadius: 20,
+          border: "1px solid rgba(255, 255, 255, 0.08)",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.45)",
+          maxHeight: "85vh",
+          overflowY: "auto",
+        }}
+      >
+        <div style={{ color: "#a5b4fc", fontSize: 11, fontWeight: "bold", textAlign: "center", marginBottom: 8, fontFamily: "'Cairo', sans-serif", letterSpacing: 0.5 }}>
+          كواكب المجموعة
+        </div>
+        {PLANETS_LIST.map((planet) => {
+          const isSelected = selectedPlanet?.nameAr === planet.nameAr;
+          return (
+            <button
+              key={planet.nameEn}
+              onClick={() => handlePlanetClick(planet.nameAr, planet.radius)}
+              style={{
+                background: isSelected ? "rgba(99,102,241,0.22)" : "rgba(255,255,255,0.02)",
+                border: isSelected ? "1px solid rgba(129,140,248,0.45)" : "1px solid rgba(255,255,255,0.04)",
+                borderRadius: 10,
+                padding: "8px 14px",
+                color: isSelected ? "#e0e7ff" : "#94a3b8",
+                fontSize: 13,
+                fontFamily: "'Cairo', 'Tajawal', sans-serif",
+                cursor: "pointer",
+                textAlign: "right",
+                transition: "all 0.2s",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                minWidth: 105,
+              }}
+              onMouseEnter={(e) => {
+                if (!isSelected) {
+                  e.currentTarget.style.background = "rgba(255,255,255,0.08)";
+                  e.currentTarget.style.color = "#fff";
+                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isSelected) {
+                  e.currentTarget.style.background = "rgba(255,255,255,0.02)";
+                  e.currentTarget.style.color = "#94a3b8";
+                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.04)";
+                }
+              }}
+            >
+              <span>{planet.nameAr}</span>
+              <span style={{ fontSize: 14 }}>{planet.icon}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── HUD: اسم الكوكب + زر الرجوع ── */}
+      {selectedPlanet && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 32,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 30,
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: 12,
+            pointerEvents: "none",
+          }}
+        >
+          {/* اسم الكوكب */}
+          <div
+            style={{
+              background: "rgba(10,15,40,0.78)",
+              backdropFilter: "blur(18px)",
+              border: "1px solid rgba(120,160,255,0.22)",
+              borderRadius: 20,
+              padding: "10px 28px",
+              color: "#e8f0ff",
+              fontFamily: "'Cairo', 'Tajawal', sans-serif",
+              fontSize: 22,
+              fontWeight: 700,
+              letterSpacing: 1,
+              boxShadow: "0 4px 32px rgba(60,120,255,0.18)",
+              opacity: arrived ? 1 : 0.6,
+              transition: "opacity 0.4s",
+            }}
+          >
+            🪐 {selectedPlanet.nameAr}
+          </div>
+
+          {/* زر الرجوع */}
+          <button
+            onClick={handleReset}
+            style={{
+              pointerEvents: "auto",
+              background: "rgba(60,100,220,0.18)",
+              backdropFilter: "blur(14px)",
+              border: "1px solid rgba(120,160,255,0.35)",
+              borderRadius: 14,
+              padding: "8px 22px",
+              color: "#a8c0ff",
+              fontFamily: "'Cairo', 'Tajawal', sans-serif",
+              fontSize: 15,
+              cursor: "pointer",
+              transition: "background 0.2s, color 0.2s",
+              letterSpacing: 0.5,
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.background = "rgba(80,130,255,0.35)";
+              (e.currentTarget as HTMLButtonElement).style.color = "#fff";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.background = "rgba(60,100,220,0.18)";
+              (e.currentTarget as HTMLButtonElement).style.color = "#a8c0ff";
+            }}
+          >
+            ← العودة للفضاء
+          </button>
+        </div>
+      )}
+
       <GoogleRoadMapOverlay
         active={roadMapState.active}
         center={roadMapState.center}
