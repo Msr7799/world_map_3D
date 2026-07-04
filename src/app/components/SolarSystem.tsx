@@ -58,7 +58,7 @@ const PLANETS: PlanetDef[] = [
     nameAr: "عطارد",
     emoji: "⚫",
     radius: S * 0.38,
-    orbitRadius: 10,
+    orbitRadius: 14,
     orbitSpeed: 0.058,
     rotSpeed: 0.003,
     tilt: 0.034,

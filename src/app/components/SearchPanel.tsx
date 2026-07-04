@@ -36,7 +36,20 @@ export default function SearchPanel() {
   const [locMessage, setLocMessage] = useState("");
   const [locAddress, setLocAddress] = useState("");
 
-  const { flyTo, addMarker, selectMarker } = useEarthStore();
+  const { flyTo, addMarker, selectMarker, setMyLocation, setTopPanelHeight } = useEarthStore();
+  const panelRootRef = useRef<HTMLDivElement>(null);
+
+  // قياس ارتفاع اللوحة الفعلي وإبلاغ المتجر به (عشان عناصر ثانية زي قائمة الكواكب
+  // تتموضع تحتها دائمًا بدون تداخل، مهما تغيّر التبويب أو حجم الشاشة)
+  useEffect(() => {
+    const el = panelRootRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const report = () => setTopPanelHeight(el.getBoundingClientRect().height);
+    report();
+    const ro = new ResizeObserver(report);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [setTopPanelHeight, isCollapsed, activeTab]);
 
   useEffect(() => {
     initGoogleMaps().catch(console.error);
@@ -156,19 +169,10 @@ export default function SearchPanel() {
         setLocStatus("found");
         setLocMessage("تم تحديد موقعك بنجاح!");
 
-        const marker = {
-          id: "my-location",
-          lat,
-          lng,
-          name: "موقعي الحالي",
-          country: addressStr,
-          type: "custom" as const,
-          color: "#34d399",
-          size: 1.5,
-        };
-        addMarker(marker);
-        selectMarker(marker);
-        flyTo(lat, lng, 2.0);
+        // نخزن الموقع في المتجر ليتم عرضه كنقطة زرقاء نابضة (مثل خرائط Google)
+        // بدل علامة عادية، وننتقل مباشرة لمستوى خريطة الشارع
+        setMyLocation({ lat, lng });
+        flyTo(lat, lng, 1.5);
       },
       (err) => {
         setLocStatus("error");
@@ -194,7 +198,7 @@ export default function SearchPanel() {
 
   if (isCollapsed) {
     return (
-      <div className="relative w-full flex justify-end">
+      <div ref={panelRootRef} className="relative w-full flex justify-end">
         <button
           onClick={() => setIsCollapsed(false)}
           className="flex items-center gap-2 px-4 py-2.5 rounded-full transition-all duration-200 hover:scale-105 active:scale-95 shadow-lg shadow-sky-950/40 pointer-events-auto"
@@ -217,7 +221,7 @@ export default function SearchPanel() {
   }
 
   return (
-    <div className="relative w-full max-w-sm pointer-events-auto">
+    <div ref={panelRootRef} className="relative w-full max-w-sm pointer-events-auto">
       <div
         style={{
           background: "rgba(6,13,26,0.88)",

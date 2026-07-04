@@ -1,7 +1,6 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { motion } from "framer-motion";
 import { useEffect, useRef } from "react";
 import { gsap } from "gsap";
@@ -104,37 +103,19 @@ function Header() {
         </div>
       </div>
 
-      {/* Solar System link + حالة الاتصال */}
-      <div className="flex items-center gap-1.5">
-        <Link
-          href="/"
-          className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] sm:px-3 sm:py-1.5 sm:text-xs transition-all hover:scale-105 active:scale-95"
-          style={{
-            background: "rgba(255,100,0,0.18)",
-            backdropFilter: "blur(12px)",
-            border: "1px solid rgba(255,150,0,0.35)",
-            color: "rgba(255,180,80,0.95)",
-            direction: "rtl",
-            textDecoration: "none",
-            fontFamily: "'Cairo', sans-serif",
-          }}
-        >
-          🪐 <span className="hidden min-[380px]:inline">المجموعة الشمسية</span>
-          <span className="inline min-[380px]:hidden">المجموعة</span>
-        </Link>
-        <div
-          className="hidden items-center gap-2 rounded-full px-3 py-1.5 text-xs sm:flex"
-          style={{
-            background: "rgba(6,13,26,0.8)",
-            backdropFilter: "blur(12px)",
-            border: "1px solid rgba(56,189,248,0.15)",
-            color: "rgba(56,189,248,0.7)",
-            direction: "rtl",
-          }}
-        >
-          <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-          WebGL نشط
-        </div>
+      {/* حالة الاتصال */}
+      <div
+        className="hidden items-center gap-2 rounded-full px-3 py-1.5 text-xs sm:flex"
+        style={{
+          background: "rgba(6,13,26,0.8)",
+          backdropFilter: "blur(12px)",
+          border: "1px solid rgba(56,189,248,0.15)",
+          color: "rgba(56,189,248,0.7)",
+          direction: "rtl",
+        }}
+      >
+        <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+        WebGL نشط
       </div>
     </motion.header>
   );

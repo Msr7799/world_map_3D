@@ -199,7 +199,7 @@ function SkyBox() {
   const [starsTexture, setStarsTexture] = React.useState<THREE.Texture | null>(null);
   React.useEffect(() => {
     const loader = new THREE.TextureLoader();
-    loader.load("/textures/2k_stars_milky_way.jpg", (t) => { t.colorSpace = THREE.SRGBColorSpace; setStarsTexture(t); }, undefined, () => setStarsTexture(null));
+    loader.load("/textures/8k_stars_milky_way.jpg", (t) => { t.colorSpace = THREE.SRGBColorSpace; setStarsTexture(t); }, undefined, () => setStarsTexture(null));
   }, []);
   if (!starsTexture) return null;
   return (
@@ -700,12 +700,12 @@ function SolarSystemOverlay({
     // عطارد
     const mA = t * 4.1;
     if (mercuryRef.current) {
-      mercuryRef.current.position.set(sunX + Math.cos(mA) * 6, 0, sunZ + Math.sin(mA) * 6);
+      mercuryRef.current.position.set(sunX + Math.cos(mA) * 11, 0, sunZ + Math.sin(mA) * 11);
       mercuryRef.current.rotation.y += 0.005;
     }
     // الزهرة
     const vA = t * 1.6;
-    if (venusGroupRef.current) venusGroupRef.current.position.set(sunX + Math.cos(vA) * 10, 0, sunZ + Math.sin(vA) * 10);
+    if (venusGroupRef.current) venusGroupRef.current.position.set(sunX + Math.cos(vA) * 17, 0, sunZ + Math.sin(vA) * 17);
     if (venusMeshRef.current)  venusMeshRef.current.rotation.y += 0.003;
 
     // القمر (يدور حول الأرض)
@@ -766,8 +766,9 @@ function SolarSystemOverlay({
         {/* ضوء الشمس */}
         <pointLight intensity={4} color="#fffaf0" distance={260} decay={0.5} />
         {/* مسارات المدارات (مركزها الشمس) */}
-        <OrbitPath radius={6} />
-        <OrbitPath radius={10} />
+        <OrbitPath radius={11} />
+        <OrbitPath radius={17} />
+        <OrbitPath radius={14} />
         <OrbitPath radius={30} />
         <OrbitPath radius={40} />
         <OrbitPath radius={58} />
@@ -937,9 +938,8 @@ export default function Earth3D() {
           onClick={() => setIsSidebarCollapsed(false)}
           style={{
             position: "absolute",
-            top: "50%",
+            top: "clamp(200px, 26vh, 260px)",
             left: 16,
-            transform: "translateY(-50%)",
             zIndex: 30,
             background: "rgba(10, 16, 32, 0.85)",
             backdropFilter: "blur(16px)",
@@ -956,8 +956,8 @@ export default function Earth3D() {
             transition: "transform 0.2s, background 0.2s",
           }}
           title="عرض كواكب المجموعة"
-          onMouseEnter={(e) => { e.currentTarget.style.transform = "translateY(-50%) scale(1.1)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.transform = "translateY(-50%) scale(1)"; }}
+          onMouseEnter={(e) => { e.currentTarget.style.transform = "scale(1.1)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.transform = "scale(1)"; }}
         >
           <span style={{ fontSize: 18 }}>🪐</span>
         </button>
@@ -965,9 +965,8 @@ export default function Earth3D() {
         <div
           style={{
             position: "absolute",
-            top: "50%",
+            top: "clamp(200px, 26vh, 260px)",
             left: 16,
-            transform: "translateY(-50%)",
             zIndex: 30,
             display: "flex",
             flexDirection: "column",
@@ -978,7 +977,7 @@ export default function Earth3D() {
             borderRadius: 20,
             border: "1px solid rgba(255, 255, 255, 0.12)",
             boxShadow: "0 8px 32px rgba(0,0,0,0.45)",
-            maxHeight: "80vh",
+            maxHeight: "calc(100vh - clamp(200px, 26vh, 260px) - 24px)",
             overflowY: "auto",
             width: 140,
           }}

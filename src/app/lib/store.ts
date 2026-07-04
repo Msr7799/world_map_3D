@@ -36,6 +36,8 @@ export const useEarthStore = create<EarthState>((set: (partial: Partial<EarthSta
   nightMode: false,
   isMapActive: false,
   isRouteActive: false,
+  topPanelHeight: 0,
+  myLocation: null,
 
   // Actions
   setRotating: (rotating) => set({ isRotating: rotating }),
@@ -82,6 +84,9 @@ export const useEarthStore = create<EarthState>((set: (partial: Partial<EarthSta
     isMapActive: active,
     isRouteActive: active ? state.isRouteActive : false
   })),
+
+  setTopPanelHeight: (height) => set({ topPanelHeight: height }),
+  setMyLocation: (loc) => set({ myLocation: loc }),
 
   setRouteActive: (active) => set({ isRouteActive: active }),
 }));

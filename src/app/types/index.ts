@@ -105,6 +105,12 @@ export interface EarthState {
   isMapActive: boolean;
   isRouteActive: boolean;
 
+  // ارتفاع لوحة البحث العلوية الفعلي (px) — لتفادي تداخل قائمة الكواكب معها
+  topPanelHeight: number;
+
+  // موقع المستخدم الحالي (GPS) لعرض نقطة زرقاء نابضة على الخريطة
+  myLocation: { lat: number; lng: number } | null;
+
   // Actions
   setRotating: (rotating: boolean) => void;
   setZoom: (zoom: number) => void;
@@ -120,6 +126,8 @@ export interface EarthState {
   toggleNightMode: () => void;
   setMapActive: (active: boolean) => void;
   setRouteActive: (active: boolean) => void;
+  setTopPanelHeight: (height: number) => void;
+  setMyLocation: (loc: { lat: number; lng: number } | null) => void;
 }
 
 export interface CameraState {
