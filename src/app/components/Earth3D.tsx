@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useRef, useEffect, Suspense, useState, useCallback } from "react";
+import Image from "next/image";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Stars, Html, OrbitControls, useTexture } from "@react-three/drei";
 import * as THREE from "three";
 import { gsap } from "gsap";
 import { useEarthStore } from "@/lib/store";
-import { initGoogleMaps, latLngToVector3, fetchPlaceDetails, calculateRoute, reverseGeocode } from "@/lib/maps";
-import type { EarthMarker, PlaceDetails, RouteResult, DroppedPin } from "@/types";
+import { initGoogleMaps, latLngToVector3, fetchPlaceDetails, reverseGeocode } from "@/lib/maps";
+import type { EarthMarker, PlaceDetails, DroppedPin } from "@/types";
 import PlaceInfoPanel from "@/components/PlaceInfoPanel";
 import RoutePanel from "@/components/RoutePanel";
 
@@ -130,13 +131,47 @@ function getSunPosition(): THREE.Vector3 {
   return new THREE.Vector3(x, y, z).multiplyScalar(-10);
 }
 
+function MyLocationDot3D({ lat, lng }: { lat: number; lng: number }) {
+  const ringRef = useRef<THREE.Mesh>(null);
+  const [x, y, z] = latLngToVector3(lat, lng, 1.03);
+
+  useFrame((state) => {
+    if (ringRef.current) {
+      const t = (state.clock.elapsedTime * 0.9) % 1;
+      const s = 1 + t * 2.2;
+      ringRef.current.scale.setScalar(s);
+      const mat = ringRef.current.material as THREE.MeshBasicMaterial;
+      mat.opacity = Math.max(0, 0.55 * (1 - t));
+    }
+  });
+
+  return (
+    <group position={[x, y, z]}>
+      {/* الحلقة النابضة (تتوسّع وتتلاشى باستمرار مثل خرائط Google) */}
+      <mesh ref={ringRef} rotation={[Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.014, 0.02, 32]} />
+        <meshBasicMaterial color="#4285f4" transparent opacity={0.5} side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
+      {/* النقطة الزرقاء الثابتة في المنتصف */}
+      <mesh>
+        <sphereGeometry args={[0.013, 20, 20]} />
+        <meshBasicMaterial color="#ffffff" />
+      </mesh>
+      <mesh scale={[0.72, 0.72, 0.72]}>
+        <sphereGeometry args={[0.013, 20, 20]} />
+        <meshStandardMaterial color="#4285f4" emissive="#4285f4" emissiveIntensity={1.2} roughness={0} metalness={0.3} />
+      </mesh>
+    </group>
+  );
+}
+
 function EarthSphere({ onEarthClick }: { onEarthClick: (nameAr: string, radius: number) => void }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const cloudsRef = useRef<THREE.Mesh>(null);
   const groupRef = useRef<THREE.Group>(null);
   const sunLightRef = useRef<THREE.DirectionalLight>(null);
   const { camera, size } = useThree();
-  const { isRotating, rotationSpeed, currentLat, currentLng, zoom, showClouds, nightMode, markers, selectMarker, selectedMarker } = useEarthStore();
+  const { isRotating, rotationSpeed, currentLat, currentLng, zoom, showClouds, nightMode, markers, selectMarker, selectedMarker, myLocation } = useEarthStore();
   const [dayTexture, setDayTexture] = React.useState<THREE.Texture | null>(null);
   const [cloudsTexture, setCloudsTexture] = React.useState<THREE.Texture | null>(null);
   const [lightsTexture, setLightsTexture] = React.useState<THREE.Texture | null>(null);
@@ -191,6 +226,7 @@ function EarthSphere({ onEarthClick }: { onEarthClick: (nameAr: string, radius: 
       {markers.map((marker: EarthMarker) => (
         <LocationMarker key={marker.id} marker={marker} onClick={(m) => { selectMarker(selectedMarker?.id === m.id ? null : m); }} />
       ))}
+      {myLocation && <MyLocationDot3D lat={myLocation.lat} lng={myLocation.lng} />}
     </group>
   );
 }
@@ -203,9 +239,9 @@ function SkyBox() {
   }, []);
   if (!starsTexture) return null;
   return (
-    <mesh>
-      <sphereGeometry args={[90, 64, 64]} />
-      <meshBasicMaterial map={starsTexture} side={THREE.BackSide} />
+    <mesh frustumCulled={false} renderOrder={-1}>
+      <sphereGeometry args={[420, 64, 64]} />
+      <meshBasicMaterial map={starsTexture} side={THREE.BackSide} depthWrite={false} />
     </mesh>
   );
 }
@@ -276,12 +312,14 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
   const mapElRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const droppedPinMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
+  const myLocationMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const directionsRendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   // ربط store لتزامن حالة RoutePanel مع باقي الواجهة
   const setRouteActive = useEarthStore((s) => s.setRouteActive);
+  const myLocation = useEarthStore((s) => s.myLocation);
 
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [mapType, setMapType] = React.useState<"roadmap" | "hybrid">("roadmap");
@@ -373,6 +411,65 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
     }
   }, [mapType]);
 
+  // حقن أنيميشن النبض مرة واحدة فقط في الصفحة (نقطة "موقعي الحالي" الزرقاء)
+  useEffect(() => {
+    if (document.getElementById("my-location-pulse-style")) return;
+    const style = document.createElement("style");
+    style.id = "my-location-pulse-style";
+    style.textContent = `
+      @keyframes myLocationPulse {
+        0% { transform: scale(0.6); opacity: 0.55; }
+        70% { transform: scale(2.4); opacity: 0; }
+        100% { transform: scale(2.4); opacity: 0; }
+      }
+    `;
+    document.head.appendChild(style);
+  }, []);
+
+  // ── عرض/تحديث نقطة "موقعي الحالي" الزرقاء النابضة + توسيط الخريطة عليها ──
+  useEffect(() => {
+    if (!active || !myLocation || !mapRef.current || !window.google?.maps) return;
+    let cancelled = false;
+
+    google.maps.importLibrary("marker").then((lib) => {
+      if (cancelled || !mapRef.current) return;
+      const { AdvancedMarkerElement } = lib as google.maps.MarkerLibrary;
+
+      const el = document.createElement("div");
+      el.style.position = "relative";
+      el.style.width = "22px";
+      el.style.height = "22px";
+      el.innerHTML = `
+        <div style="position:absolute;inset:0;border-radius:50%;background:#4285f4;animation:myLocationPulse 1.8s ease-out infinite;"></div>
+        <div style="position:absolute;top:50%;left:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:#4285f4;border:2.5px solid white;box-shadow:0 1px 6px rgba(0,0,0,0.45);"></div>
+      `;
+
+      if (myLocationMarkerRef.current) {
+        myLocationMarkerRef.current.position = myLocation;
+      } else {
+        myLocationMarkerRef.current = new AdvancedMarkerElement({
+          map: mapRef.current,
+          position: myLocation,
+          content: el,
+          title: "موقعي الحالي",
+          zIndex: 999,
+        });
+      }
+
+      mapRef.current.panTo(myLocation);
+    });
+
+    return () => { cancelled = true; };
+  }, [active, myLocation]);
+
+  // إزالة نقطة الموقع عند إغلاق الخريطة
+  useEffect(() => {
+    if (!active && myLocationMarkerRef.current) {
+      myLocationMarkerRef.current.map = null;
+      myLocationMarkerRef.current = null;
+    }
+  }, [active]);
+
   // Long-press للموبايل
   const handleTouchStart = (e: React.TouchEvent) => {
     const touch = e.touches[0];
@@ -413,15 +510,6 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  // حساب المسار
-  const handleRequestRoute = async (origin: { lat: number; lng: number }, destination: { lat: number; lng: number }, mode: "DRIVING" | "WALKING"): Promise<RouteResult | null> => {
-    if (!mapRef.current || !directionsRendererRef.current) return null;
-    const data = await calculateRoute(origin, destination, mode);
-    if (!data) return null;
-    directionsRendererRef.current.setDirections(data.response);
-    return data.result;
-  };
-
   const clearRoute = () => {
     if (directionsRendererRef.current) {
       directionsRendererRef.current.setDirections({ routes: [] } as unknown as google.maps.DirectionsResult);
@@ -454,10 +542,10 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
       <div className="absolute right-4 top-4 z-10 flex flex-col gap-2 sm:right-6">
         <div className="flex flex-col gap-2 rounded-xl p-3 shadow-2xl" style={{ direction: "rtl", background: "rgba(6,13,26,0.90)", backdropFilter: "blur(16px)", border: "1px solid rgba(56,189,248,0.22)", minWidth: 148 }}>
           <div className="text-xs font-bold text-sky-300">{mapType === "roadmap" ? "🗺️ خريطة الطرق" : "🛰️ قمر صناعي"}</div>
-          <button onClick={() => setMapType(mapType === "roadmap" ? "hybrid" : "roadmap")} className="w-full rounded-lg py-1.5 text-xs font-bold text-sky-200 transition-colors hover:bg-sky-400/15 flex items-center justify-center gap-1" style={{ border: "1px solid rgba(56,189,248,0.24)" }}>
+          <button onClick={() => setMapType(mapType === "roadmap" ? "hybrid" : "roadmap")} className="w-full rounded-lg py-1.5 text-xs font-bold text-sky-200 transition-colors hover:bg-sky-400/15 flex items-center justify-center gap-1" style={{ border: "1px solid rgba(56,189,248,0.24)", cursor: "pointer" }}>
             {mapType === "roadmap" ? "🛰️ قمر صناعي" : "🗺️ خريطة طرق"}
           </button>
-          <button onClick={onClose} className="w-full rounded-lg py-1.5 text-xs font-bold text-sky-200 transition-colors hover:bg-sky-400/15 flex items-center justify-center gap-1" style={{ border: "1px solid rgba(56,189,248,0.24)" }}>
+          <button onClick={onClose} className="w-full rounded-lg py-1.5 text-xs font-bold text-sky-200 transition-colors hover:bg-sky-400/15 flex items-center justify-center gap-1" style={{ border: "1px solid rgba(56,189,248,0.24)", cursor: "pointer" }}>
             🌍 رجوع للأرض
           </button>
         </div>
@@ -484,7 +572,7 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
                   <p className="text-white/40 text-xs">{droppedPin.lat.toFixed(5)}°، {droppedPin.lng.toFixed(5)}°</p>
                 </div>
               </div>
-              <button onClick={closePinPanel} className="w-7 h-7 rounded-full flex items-center justify-center text-white/40 hover:text-white/80 hover:bg-white/10 transition-all">
+              <button onClick={closePinPanel} className="w-7 h-7 rounded-full flex items-center justify-center text-white/40 hover:text-white/80 hover:bg-white/10 transition-all" style={{ cursor: "pointer" }}>
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
@@ -499,7 +587,7 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
                 <p className="text-white font-mono text-sm font-bold">{droppedPin.lng.toFixed(4)}°</p>
               </div>
             </div>
-            <button onClick={openRoutePanel} className="w-full py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-95" style={{ background: "linear-gradient(135deg, #6366f1, #0ea5e9)", boxShadow: "0 4px 20px rgba(99,102,241,0.35)" }}>
+            <button onClick={openRoutePanel} className="w-full py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-95" style={{ background: "linear-gradient(135deg, #6366f1, #0ea5e9)", boxShadow: "0 4px 20px rgba(99,102,241,0.35)", cursor: "pointer" }}>
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
               احسب الطريق إلى هنا
             </button>
@@ -509,7 +597,7 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
 
       {/* لوحة المسار */}
       {showRoutePanel && routeDestination && (
-        <RoutePanel destinationName={routeDestination.name} destinationLat={routeDestination.lat} destinationLng={routeDestination.lng} onClose={clearRoute} onRequestRoute={handleRequestRoute} />
+        <RoutePanel destinationName={routeDestination.name} destinationLat={routeDestination.lat} destinationLng={routeDestination.lng} onClose={clearRoute} />
       )}
 
       {loadError && (
@@ -521,18 +609,229 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
   );
 }
 
-// ─── قائمة الكواكب للتنقل السريع ──────────────────────────────────────────────
-const PLANETS_LIST = [
-  { nameEn: "sun", nameAr: "الشمس", radius: 7.5, icon: "☀️" },
-  { nameEn: "mercury", nameAr: "عطارد", radius: 0.55, icon: "🪐" },
-  { nameEn: "venus", nameAr: "الزهرة", radius: 1.2, icon: "🪐" },
-  { nameEn: "earth", nameAr: "الأرض", radius: 1.0, icon: "🌍" },
-  { nameEn: "moon", nameAr: "القمر", radius: 0.40, icon: "🌙" },
-  { nameEn: "mars", nameAr: "المريخ", radius: 0.72, icon: "🪐" },
-  { nameEn: "jupiter", nameAr: "المشتري", radius: 3.5, icon: "🪐" },
-  { nameEn: "saturn", nameAr: "زحل", radius: 3.0, icon: "🪐" },
-  { nameEn: "uranus", nameAr: "أورانوس", radius: 2.0, icon: "🪐" },
-  { nameEn: "neptune", nameAr: "نبتون", radius: 1.9, icon: "🪐" },
+// ─── تعريف بيانات الكواكب بالطريقة نفسها في SolarSystem.tsx ─────────────────
+interface PlanetDef {
+  id: string;
+  name: string;
+  nameAr: string;
+  emoji: string;
+  icon: string;
+  radius: number;
+  orbitRadius: number;
+  orbitSpeed: number;
+  rotSpeed: number;
+  tilt: number;
+  angle0: number;
+  texture: string;
+  atmosphereTex?: string;
+  ring?: { inner: number; outer: number; tex: string };
+  color: string;
+  facts: string[];
+}
+
+const PLANETS: PlanetDef[] = [
+  {
+    id: "sun",
+    name: "Sun",
+    nameAr: "الشمس",
+    emoji: "☀️",
+    icon: "/sun.png",
+    radius: 7.5,
+    orbitRadius: 0,
+    orbitSpeed: 0,
+    rotSpeed: 0.003,
+    tilt: 0,
+    angle0: 0,
+    texture: "/textures/sun.jpg",
+    color: "#fbbf24",
+    facts: [
+      "نجمنا المركزي في المجموعة الشمسية",
+      "يمثل 99.86% من كتلة النظام الشمسي",
+      "درجة الحرارة على سطحه تتجاوز 5500°م",
+    ],
+  },
+  {
+    id: "mercury",
+    name: "Mercury",
+    nameAr: "عطارد",
+    emoji: "⚫",
+    icon: "/mercury.png",
+    radius: 0.34,
+    orbitRadius: 14,
+    orbitSpeed: 0.058,
+    rotSpeed: 0.003,
+    tilt: 0.034,
+    angle0: 0.4,
+    texture: "/textures/mercury.jpg",
+    color: "#b5b5b5",
+    facts: [
+      "أقرب كوكب للشمس",
+      "يومه أطول من سنته",
+      "لا يوجد غلاف جوي كثيف",
+    ],
+  },
+  {
+    id: "venus",
+    name: "Venus",
+    nameAr: "الزهرة",
+    emoji: "🟡",
+    icon: "/venus.png",
+    radius: 0.86,
+    orbitRadius: 16,
+    orbitSpeed: 0.022,
+    rotSpeed: -0.001,
+    tilt: 3.09,
+    angle0: 1.7,
+    texture: "/textures/venus_surface.jpg",
+    atmosphereTex: "/textures/venus_atmosphere.jpg",
+    color: "#e8c97e",
+    facts: [
+      "أشد الكواكب حرارةً",
+      "يدور عكس دوران الشمس",
+      "غلافه الجوي كثيف ويحتوي ثاني أكسيد الكربون",
+    ],
+  },
+  {
+    id: "earth",
+    name: "Earth",
+    nameAr: "الأرض",
+    emoji: "🌍",
+    icon: "/planet-earth.png",
+    radius: 0.9,
+    orbitRadius: 22,
+    orbitSpeed: 0.014,
+    rotSpeed: 0.01,
+    tilt: 0.41,
+    angle0: 0,
+    texture: "/textures/8k_earth_daymap.jpg",
+    color: "#4fa3e0",
+    facts: [
+      "الكوكب الوحيد المعروف بالحياة",
+      "71% من سطحه مغطى بالمياه",
+      "له قمر واحد طبيعي",
+    ],
+  },
+  {
+    id: "moon",
+    name: "Moon",
+    nameAr: "القمر",
+    emoji: "🌙",
+    icon: "/moon.png",
+    radius: 0.4,
+    orbitRadius: 2,
+    orbitSpeed: 1.3,
+    rotSpeed: 0.005,
+    tilt: 0,
+    angle0: 0,
+    texture: "/textures/moon.jpg",
+    color: "#cbd5e1",
+    facts: [
+      "القمر الطبيعي للأرض",
+      "دوره حول نفسه يوازي دورانه حول الأرض",
+      "سطحه مليء بالفوهات البركانية",
+    ],
+  },
+  {
+    id: "mars",
+    name: "Mars",
+    nameAr: "المريخ",
+    emoji: "🔴",
+    icon: "/mars.png",
+    radius: 0.48,
+    orbitRadius: 30,
+    orbitSpeed: 0.008,
+    rotSpeed: 0.009,
+    tilt: 0.44,
+    angle0: 3.1,
+    texture: "/textures/mars.jpg",
+    color: "#c1440e",
+    facts: [
+      "الكوكب الأحمر",
+      "يحتوي على أعلى بركان في المجموعة الشمسية",
+      "له قمران صغيران",
+    ],
+  },
+  {
+    id: "jupiter",
+    name: "Jupiter",
+    nameAr: "المشتري",
+    emoji: "🟠",
+    icon: "/Jupiter.png",
+    radius: 4.2,
+    orbitRadius: 52,
+    orbitSpeed: 0.0025,
+    rotSpeed: 0.022,
+    tilt: 0.054,
+    angle0: 0.9,
+    texture: "/textures/jupiter.jpg",
+    color: "#c88b3a",
+    facts: [
+      "أضخم كواكب المجموعة الشمسية",
+      "يحتوي على العاصفة الحمراء الكبرى",
+      "له عشرات الأقمار المعروفة",
+    ],
+  },
+  {
+    id: "saturn",
+    name: "Saturn",
+    nameAr: "زحل",
+    emoji: "🪐",
+    icon: "/saturn.png",
+    radius: 3.6,
+    orbitRadius: 72,
+    orbitSpeed: 0.0015,
+    rotSpeed: 0.019,
+    tilt: 0.47,
+    angle0: 2.3,
+    texture: "/textures/saturn.jpg",
+    ring: { inner: 4.5, outer: 8.5, tex: "/textures/saturn_ring_alpha.png" },
+    color: "#e4d191",
+    facts: [
+      "يمتاز بحلقاته الجميلة",
+      "أقل كثافةً من الماء",
+      "له العديد من الأقمار الكبيرة",
+    ],
+  },
+  {
+    id: "uranus",
+    name: "Uranus",
+    nameAr: "أورانوس",
+    emoji: "🔵",
+    icon: "/uranus.png",
+    radius: 1.6,
+    orbitRadius: 92,
+    orbitSpeed: 0.0008,
+    rotSpeed: -0.013,
+    tilt: 1.71,
+    angle0: 4.1,
+    texture: "/textures/uranus.jpg",
+    color: "#7de8e8",
+    facts: [
+      "يدور على جانبه",
+      "أبرد كوكب رغم أنه ليس الأبعد",
+      "يُصنف كعملاق جليدي",
+    ],
+  },
+  {
+    id: "neptune",
+    name: "Neptune",
+    nameAr: "نبتون",
+    emoji: "🔵",
+    icon: "/neptune.png",
+    radius: 1.55,
+    orbitRadius: 110,
+    orbitSpeed: 0.0004,
+    rotSpeed: 0.015,
+    tilt: 0.49,
+    angle0: 5.5,
+    texture: "/textures/neptune.jpg",
+    color: "#4b70dd",
+    facts: [
+      "أبعد الكواكب الكبيرة",
+      "رياحه تعد الأسرع في المجموعة الشمسية",
+      "اكتُشف بالرياضيات قبل الرصد",
+    ],
+  },
 ];
 
 // ─── نوع الكوكب المحدد ───────────────────────────────────────────────────────
@@ -892,16 +1191,28 @@ function Scene({
 }
 
 export default function Earth3D() {
-  const { nightMode, setZoom, setMapActive } = useEarthStore();
+  const { nightMode, setZoom, setMapActive, topPanelHeight } = useEarthStore();
+  // نضع القائمة دائمًا أسفل لوحة البحث الفعلية (مهما كان تبويبها المفتوح أو حجم الشاشة)
+  // بدل رقم ثابت يتكسر كل ما تغيّر ارتفاع اللوحة فوقه
+  const sidebarTopPx = Math.min(Math.max(topPanelHeight + 100, 260), 580);
   const [roadMapState, setRoadMapState] = React.useState({ active: false, center: { lat: 24, lng: 45 } });
   const [selectedPlanet, setSelectedPlanet] = useState<SelectedPlanet | null>(null);
   const [arrived, setArrived] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isDetailsCollapsed, setIsDetailsCollapsed] = useState(false);
+  const [windowWidth, setWindowWidth] = useState(typeof window !== "undefined" ? window.innerWidth : 1200);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       setIsSidebarCollapsed(window.innerWidth < 768);
     }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
   React.useEffect(() => { setMapActive(roadMapState.active); }, [roadMapState.active, setMapActive]);
@@ -911,10 +1222,18 @@ export default function Earth3D() {
     setArrived(false);
   }, []);
 
+  const selectedPlanetData = selectedPlanet ? PLANETS.find((p) => p.nameAr === selectedPlanet.nameAr) : null;
+
   const handleReset = useCallback(() => {
     setSelectedPlanet(null);
     setArrived(false);
+    setIsDetailsCollapsed(false);
   }, []);
+
+  const isMobile = windowWidth < 640;
+  const statsGridColumns = isMobile ? "1fr" : "repeat(3, minmax(0, 1fr))";
+  const panelWidth = isMobile ? "min(92vw, 340px)" : "min(92vw, 440px)";
+  const panelPadding = isMobile ? "12px 16px" : "16px 20px";
 
   return (
     <div className="relative h-full w-full">
@@ -938,7 +1257,7 @@ export default function Earth3D() {
           onClick={() => setIsSidebarCollapsed(false)}
           style={{
             position: "absolute",
-            top: "clamp(200px, 26vh, 260px)",
+            top: `${sidebarTopPx}px`,
             left: 16,
             zIndex: 30,
             background: "rgba(10, 16, 32, 0.85)",
@@ -965,7 +1284,7 @@ export default function Earth3D() {
         <div
           style={{
             position: "absolute",
-            top: "clamp(200px, 26vh, 260px)",
+            top: `${sidebarTopPx}px`,
             left: 16,
             zIndex: 30,
             display: "flex",
@@ -977,7 +1296,7 @@ export default function Earth3D() {
             borderRadius: 20,
             border: "1px solid rgba(255, 255, 255, 0.12)",
             boxShadow: "0 8px 32px rgba(0,0,0,0.45)",
-            maxHeight: "calc(100vh - clamp(200px, 26vh, 260px) - 24px)",
+            maxHeight: `calc(100vh - ${sidebarTopPx}px - 24px)`,
             overflowY: "auto",
             width: 140,
           }}
@@ -1001,11 +1320,11 @@ export default function Earth3D() {
               ◀ طي
             </button>
           </div>
-          {PLANETS_LIST.map((planet) => {
+          {PLANETS.map((planet: PlanetDef) => {
             const isSelected = selectedPlanet?.nameAr === planet.nameAr;
             return (
               <button
-                key={planet.nameEn}
+                key={planet.id}
                 onClick={() => handlePlanetClick(planet.nameAr, planet.radius)}
                 style={{
                   background: isSelected ? "rgba(99,102,241,0.22)" : "rgba(255,255,255,0.02)",
@@ -1039,15 +1358,21 @@ export default function Earth3D() {
                 }}
               >
                 <span>{planet.nameAr}</span>
-                <span style={{ fontSize: 14 }}>{planet.icon}</span>
+                <Image
+                  src={planet.icon}
+                  alt={`أيقونة ${planet.nameAr}`}
+                  width={24}
+                  height={24}
+                  style={{ borderRadius: 999, objectFit: "contain" }}
+                />
               </button>
             );
           })}
         </div>
       ))}
 
-      {/* ── HUD: اسم الكوكب + زر الرجوع ── */}
-      {!roadMapState.active && selectedPlanet && (
+      {/* ── HUD: تفاصيل الكوكب المحدد + زر الرجوع ── */}
+      {!roadMapState.active && selectedPlanet && selectedPlanetData && (
         <div
           style={{
             position: "absolute",
@@ -1060,30 +1385,89 @@ export default function Earth3D() {
             alignItems: "center",
             gap: 12,
             pointerEvents: "none",
+            width: panelWidth,
+            maxWidth: "92vw",
           }}
         >
-          {/* اسم الكوكب */}
           <div
             style={{
-              background: "rgba(10,15,40,0.78)",
+              width: "100%",
+              background: "rgba(10,15,40,0.86)",
               backdropFilter: "blur(18px)",
               border: "1px solid rgba(120,160,255,0.22)",
-              borderRadius: 20,
-              padding: "10px 28px",
+              borderRadius: 24,
+              padding: panelPadding,
               color: "#e8f0ff",
               fontFamily: "'Cairo', 'Tajawal', sans-serif",
-              fontSize: 22,
-              fontWeight: 700,
-              letterSpacing: 1,
-              boxShadow: "0 4px 32px rgba(60,120,255,0.18)",
-              opacity: arrived ? 1 : 0.6,
-              transition: "opacity 0.4s",
+              boxShadow: "0 24px 60px rgba(0,0,0,0.28)",
+              pointerEvents: "auto",
             }}
           >
-            🪐 {selectedPlanet.nameAr}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: isDetailsCollapsed ? 0 : 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 52, height: 52, borderRadius: 16, background: "rgba(255,255,255,0.08)", display: "grid", placeItems: "center" }}>
+                  <span style={{ fontSize: 28 }}>{selectedPlanetData.emoji}</span>
+                </div>
+                <div>
+                  <div style={{ color: "#38bdf8", fontSize: 18, fontWeight: 700 }}>{selectedPlanetData.nameAr}</div>
+                  <div style={{ color: "rgba(226,232,240,0.7)", fontSize: 13, marginTop: 4 }}>{selectedPlanetData.name}</div>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsDetailsCollapsed((prev) => !prev)}
+                style={{
+                  background: "rgba(255,255,255,0.08)",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  borderRadius: 14,
+                  padding: "8px 12px",
+                  color: "#dbeafe",
+                  fontSize: 12,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {isDetailsCollapsed ? "عرض التفاصيل" : "طي المعلومات"}
+              </button>
+            </div>
+
+            {!isDetailsCollapsed && (
+              <>
+                <div style={{ display: "grid", gridTemplateColumns: statsGridColumns, gap: 10, marginBottom: 14 }}>
+                  <div style={{ padding: "12px", borderRadius: 16, background: "rgba(255,255,255,0.04)", textAlign: "center" }}>
+                    <div style={{ color: "#fff", fontWeight: 700, fontSize: 14 }}>{selectedPlanetData.orbitRadius}</div>
+                    <div style={{ color: "rgba(226,232,240,0.6)", fontSize: 11, marginTop: 4 }}>مدار</div>
+                  </div>
+                  <div style={{ padding: "12px", borderRadius: 16, background: "rgba(255,255,255,0.04)", textAlign: "center" }}>
+                    <div style={{ color: "#fff", fontWeight: 700, fontSize: 14 }}>{(selectedPlanetData.orbitSpeed * 100).toFixed(2)}</div>
+                    <div style={{ color: "rgba(226,232,240,0.6)", fontSize: 11, marginTop: 4 }}>سرعة المدار</div>
+                  </div>
+                  <div style={{ padding: "12px", borderRadius: 16, background: "rgba(255,255,255,0.04)", textAlign: "center" }}>
+                    <div style={{ color: "#fff", fontWeight: 700, fontSize: 14 }}>{selectedPlanetData.rotSpeed.toFixed(3)}</div>
+                    <div style={{ color: "rgba(226,232,240,0.6)", fontSize: 11, marginTop: 4 }}>سرعة الدوران</div>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gap: 10, marginBottom: 14 }}>
+                  {selectedPlanetData.facts.map((fact, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: 16,
+                        background: "rgba(255,255,255,0.04)",
+                        color: "rgba(226,232,240,0.95)",
+                        fontSize: 13,
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      • {fact}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
-          {/* زر الرجوع */}
           <button
             onClick={handleReset}
             style={{
@@ -1092,13 +1476,14 @@ export default function Earth3D() {
               backdropFilter: "blur(14px)",
               border: "1px solid rgba(120,160,255,0.35)",
               borderRadius: 14,
-              padding: "8px 22px",
+              padding: "10px 22px",
               color: "#a8c0ff",
               fontFamily: "'Cairo', 'Tajawal', sans-serif",
               fontSize: 15,
               cursor: "pointer",
               transition: "background 0.2s, color 0.2s",
               letterSpacing: 0.5,
+              width: "100%",
             }}
             onMouseEnter={(e) => {
               (e.currentTarget as HTMLButtonElement).style.background = "rgba(80,130,255,0.35)";

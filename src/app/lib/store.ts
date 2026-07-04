@@ -85,8 +85,12 @@ export const useEarthStore = create<EarthState>((set: (partial: Partial<EarthSta
     isRouteActive: active ? state.isRouteActive : false
   })),
 
-  setTopPanelHeight: (height) => set({ topPanelHeight: height }),
-  setMyLocation: (loc) => set({ myLocation: loc }),
-
   setRouteActive: (active) => set({ isRouteActive: active }),
+
+  // ارتفاع لوحة البحث العلوية الفعلي (بالبكسل) — تُحدَّثه لوحة البحث نفسها
+  // عشان أي عنصر آخر (مثل قائمة الكواكب) يقدر يتموضع تحتها دائمًا بدون تداخل
+  setTopPanelHeight: (height) => set({ topPanelHeight: height }),
+
+  // موقع المستخدم الحالي (GPS) — يُستخدم لعرض نقطة زرقاء نابضة على الخريطة
+  setMyLocation: (loc) => set({ myLocation: loc }),
 }));
