@@ -104,7 +104,7 @@ const PLANETS: PlanetDef[] = [
     rotSpeed: 0.01,
     tilt: 0.41,
     angle0: 0.0,
-    texture: "/textures/earth_day.jpg",
+    texture: "/textures/8k_earth_daymap.jpg",
     color: "#4fa3e0",
     facts: [
       "كوكبنا الجميل",
