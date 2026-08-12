@@ -1,123 +1,172 @@
+<div align="center">
+
 # 🌍 Earth3D Explorer
 
-![Earth3D Explorer](public/earth3d.png)
+An interactive 3D experience for exploring Earth and the Solar System, with geographic search, road maps, and rich place details.
 
-تطبيق Next.js لاستكشاف الكرة الأرضية ثلاثية الأبعاد بشكل تفاعلي.
+![Earth3D Explorer preview](public/earth3d.png)
 
----
+<p>
+  <img alt="Next.js" src="https://img.shields.io/badge/Next.js-14-000000?logo=nextdotjs&logoColor=white">
+  <img alt="React" src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=061A23">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white">
+  <img alt="Three.js" src="https://img.shields.io/badge/Three.js-WebGL-000000?logo=threedotjs&logoColor=white">
+  <img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind_CSS-3-06B6D4?logo=tailwindcss&logoColor=white">
+  <img alt="Google Maps Platform" src="https://img.shields.io/badge/Google_Maps-Platform-4285F4?logo=googlemaps&logoColor=white">
+  <img alt="pnpm" src="https://img.shields.io/badge/pnpm-9-F69220?logo=pnpm&logoColor=white">
+</p>
 
-## 🚀 إعداد المشروع
+**English** · [العربية](README_AR.md)
 
-### 1. تثبيت المكتبات
-```bash
-npm install
-```
+</div>
 
-### 2. إعداد Google Cloud
+## Overview
 
-#### أ. إنشاء مشروع
-1. اذهب إلى [Google Cloud Console](https://console.cloud.google.com/)
-2. أنشئ مشروعاً جديداً أو اختر موجوداً
+**Earth3D Explorer** combines a realistic globe, cloud and city-light layers, Google-powered place discovery, and an interactive Solar System. Users can move from space down to a road map, locate their device, enter coordinates directly, inspect place details, and explore planets without leaving the experience.
 
-#### ب. تفعيل الـ APIs المطلوبة
-في قائمة **APIs & Services** → **Enable APIs**، فعّل:
-- ✅ **Maps JavaScript API** — للخرائط وعرض المواقع
-- ✅ **Places API** — للبحث عن الأماكن
-- ✅ **Geocoding API** — لتحويل الأسماء إلى إحداثيات
-- ✅ **Maps Embed API** — (اختياري) لتضمين الخرائط
+## Features
 
-#### ج. إنشاء API Keys
-في **APIs & Services** → **Credentials** → **Create Credentials** → **API Key**:
+- High-resolution WebGL globe with smooth orbit controls, zooming, and camera transitions.
+- Daytime Earth imagery, nighttime city lights, animated clouds, atmosphere, and a Milky Way background.
+- A day/night simulation with the Sun's direction calculated from the current UTC time, date, and seasonal solar declination.
+- Google Places search with addresses, ratings, photos, phone numbers, websites, and opening hours when available.
+- Coordinate search, geocoding, reverse geocoding, and markers positioned directly on the globe.
+- Browser geolocation displayed as a pulsing blue location marker.
+- Automatic transition to Google Maps near the surface, with roadmap and satellite views.
+- Destination selection and handoff to Google Maps for driving or walking navigation.
+- Interactive Sun, Moon, and all eight planets, including orbital motion, summaries, and quick facts.
+- Controls for auto-rotation, motion speed, zoom, clouds, atmosphere, coordinate grid, and night mode.
+- Responsive layouts for desktop, tablet, and mobile screens.
 
-**مفتاح للـ Frontend** (يظهر في المتصفح):
-- اسمه: `Earth3D Browser Key`
-- القيود: اختر **HTTP referrers** → أضف `localhost:3000/*` و `yourdomain.com/*`
-- APIs المسموح بها: Maps JS API, Places API
+## Day, night, and Sun direction
 
-**مفتاح للـ Backend** (سيرفر آمن):
-- اسمه: `Earth3D Server Key`
-- القيود: **IP addresses** إذا أردت
-- APIs المسموح بها: Geocoding API
+The app derives the Sun's position from the current UTC time and day of the year, including seasonal solar declination, and uses that direction to illuminate the globe. This places sunlight on the correct daytime side while nighttime city lights remain visible on the dark side. The model is intended for an interactive visual simulation; it is an astronomical approximation, not a scientific ephemeris or navigation instrument.
 
-### 3. إعداد ملف `.env.local`
-```env
-NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=AIzaSy...مفتاحك_هنا
-GOOGLE_MAPS_SERVER_API_KEY=AIzaSy...مفتاح_السيرفر
-GOOGLE_CLOUD_PROJECT_ID=your-project-id
-```
+## Technology
 
-### 4. إضافة Textures (اختياري للجودة العالية)
-ضع ملفات الـ Textures في مجلد `/public/textures/`:
-```
-public/
-└── textures/
-    ├── earth_day.jpg       ← خريطة النهار (2048×1024 أو أعلى)
-    ├── earth_night.jpg     ← خريطة الليل
-    ├── earth_specular.jpg  ← خريطة الانعكاس
-    ├── earth_normal.jpg    ← خريطة التضاريس
-    └── clouds.jpg          ← طبقة السحاب
-```
-يمكن تحميلها مجاناً من: [NASA Visible Earth](https://visibleearth.nasa.gov/)
+| Technology | Role |
+|---|---|
+| Next.js 14 + React 18 | Application structure, routing, and UI components |
+| TypeScript | Static typing and shared data models |
+| Three.js | 3D rendering, WebGL, textures, and lighting |
+| React Three Fiber | Declarative Three.js scenes in React |
+| React Three Drei | Camera controls, text, stars, and 3D helpers |
+| GSAP + Framer Motion | Camera transitions and interface animation |
+| Google Maps JavaScript API | Interactive roadmap and satellite views |
+| Places + Geocoding | Place search, details, and coordinate conversion |
+| Zustand | Search, marker, camera, and display state |
+| Tailwind CSS | Responsive interface styling |
 
-### 5. تشغيل التطبيق
-```bash
-npm run dev
-```
-افتح [http://localhost:3000](http://localhost:3000)
+## Requirements
 
----
+- A modern Node.js release compatible with Next.js 14.
+- [pnpm](https://pnpm.io/).
+- A browser with WebGL and hardware acceleration support.
+- A Google Maps Platform browser key for live maps and place search. The globe and a small set of mock search results remain available without a key.
 
-## 📦 المكتبات المستخدمة
+## Quick start
 
-| المكتبة | الغرض |
-|---------|--------|
-| `three` | محرك الرسومات ثلاثية الأبعاد |
-| `@react-three/fiber` | دمج Three.js مع React |
-| `@react-three/drei` | مساعدات جاهزة لـ R3F |
-| `gsap` | أنيميشن سلس واحترافي |
-| `framer-motion` | أنيميشن واجهة المستخدم |
-| `@googlemaps/js-api-loader` | تحميل Google Maps API |
-| `zustand` | إدارة الحالة |
-| `tailwindcss` | CSS utility-first |
-| `leva` | لوحة تحكم للمطورين |
+1. Install dependencies:
 
----
+   ```bash
+   pnpm install
+   ```
 
-## 🎮 كيفية الاستخدام
+2. Create `.env.local` in the project root:
 
-| الإجراء | الوصف |
-|---------|--------|
-| 🖱️ سحب | تدوير الكرة الأرضية |
-| 🖱️ تمرير | تكبير/تصغير |
-| 🔍 البحث | ابحث عن أي مكان في العالم |
-| 📍 نقر على موقع | عرض التفاصيل |
-| ⚙️ لوحة التحكم | تغيير خيارات العرض |
+   ```env
+   NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=your_browser_api_key
+   ```
 
----
+3. Start the development server:
 
-## 🏗️ هيكل المشروع
+   ```bash
+   pnpm dev
+   ```
 
-```
-earth3d/
-├── app/
-│   ├── layout.tsx       ← الـ Layout الرئيسي
-│   ├── page.tsx         ← الصفحة الرئيسية
-│   └── globals.css      ← الأنماط العامة
-├── components/
-│   ├── Earth3D.tsx      ← مكوّن الكرة الأرضية (Three.js)
-│   ├── SearchPanel.tsx  ← لوحة البحث
-│   ├── ControlPanel.tsx ← لوحة التحكم
-│   └── MarkerInfo.tsx   ← نافذة معلومات الموقع
-├── lib/
-│   ├── store.ts         ← إدارة الحالة (Zustand)
-│   └── maps.ts          ← وظائف Google Maps
-├── types/
-│   └── index.ts         ← TypeScript Types
+4. Open [http://localhost:3000](http://localhost:3000).
+
+## Google Maps Platform setup
+
+In the [Google Cloud Console](https://console.cloud.google.com/):
+
+1. Create a project or select an existing one.
+2. Enable **Maps JavaScript API**, **Places API (New)**, and **Geocoding API**.
+3. Create a browser API key.
+4. Restrict the key with **HTTP referrers**, for example:
+
+   ```text
+   http://localhost:3000/*
+   https://your-domain.example/*
+   ```
+
+5. Restrict the key to only the required APIs, then assign it to `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`.
+
+> `NEXT_PUBLIC_*` values are exposed to the browser. Never place secrets in them, and never leave a Google API key unrestricted.
+
+## Controls
+
+| Action | Result |
+|---|---|
+| Drag | Orbit around Earth or the selected planet |
+| Mouse wheel or pinch | Zoom in and out |
+| Search | Find a place and move the camera to it |
+| Coordinates tab | Add a marker using latitude and longitude |
+| My Location tab | Request the device location and fly to it |
+| Zoom close to Earth | Enter the road-map view automatically |
+| Click the map | Inspect a place or its coordinates |
+| Directions | Open the destination route in Google Maps |
+| Planet menu | Fly to a celestial body and inspect its details |
+
+## Routes
+
+| Route | Description |
+|---|---|
+| `/` | Main Earth experience |
+| `/earth` | The same Earth experience at an explicit route |
+| `/solar` | Standalone Solar System viewer |
+
+## Project structure
+
+```text
+world_map_3D/
 ├── public/
-│   └── textures/        ← ملفات الـ Textures
-├── .env.local           ← متغيرات البيئة (لا ترفعه!)
+│   ├── earth3d.png
+│   └── textures/              # Earth, space, and planet textures
+├── src/app/
+│   ├── components/
+│   │   ├── Earth3D.tsx        # Earth, planets, and Google Maps scene
+│   │   ├── SolarSystem.tsx    # Standalone Solar System viewer
+│   │   ├── SearchPanel.tsx    # Search, coordinates, and geolocation
+│   │   ├── ControlPanel.tsx   # Camera and display controls
+│   │   ├── PlaceInfoPanel.tsx # Place details
+│   │   └── RoutePanel.tsx     # Travel mode and navigation handoff
+│   ├── earth/page.tsx
+│   ├── solar/page.tsx
+│   ├── lib/
+│   │   ├── maps.ts            # Google Maps and geographic utilities
+│   │   └── store.ts           # Zustand store
+│   ├── types/index.ts
+│   ├── layout.tsx
+│   └── page.tsx
+├── next.config.mjs
 ├── package.json
-├── tailwind.config.ts
-├── tsconfig.json
-└── next.config.ts
+└── pnpm-lock.yaml
 ```
+
+## Scripts
+
+```bash
+pnpm dev         # Start the development server
+pnpm build       # Create a production build
+pnpm start       # Run the production build
+pnpm type-check  # Run the TypeScript checker
+pnpm lint        # Run the Next.js linter
+```
+
+## Notes
+
+- Earth and planet textures are bundled under `public/textures` and loaded locally.
+- Visual quality and frame rate depend on WebGL support and graphics hardware.
+- Device location requires user permission and a secure HTTPS context in production.
+- Place photos, business details, and opening hours depend on Google data availability and API-key permissions.
