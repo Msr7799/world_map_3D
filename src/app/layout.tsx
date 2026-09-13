@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     canonical: "/",
   },
   verification: {
-    google: "google4b335da91bc6f3c2.html",
+    google: "tedQd55zrvYnRtg8uOcxm7sTuI3AZhKVSyQU-2Gq9pg",
   },
   openGraph: {
     type: "website",
