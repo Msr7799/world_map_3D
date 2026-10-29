@@ -46,10 +46,10 @@ The app derives the Sun's position from the current UTC time and day of the year
 ## Historical imagery coverage
 
 1. Zoom into Earth until Google Maps opens, then choose **Historical imagery**. The map switches to a modern satellite view for comparison.
-2. The newest available image for the map center appears. **Drag the timeline slider** toward older available Wayback releases and CORONA captures, or toward **Present** to show only the current map. The panel shows how many images were found for the location.
+2. The newest available image for the map center appears. **Drag the timeline slider** to update the image and date immediately at the same location, moving through available Wayback releases and CORONA captures, or toward **Present** to show only the current map. The slider does not move the map.
 3. Adjust the **Compare with present** slider to change the old image's opacity. Pan to another location to refresh the available dates and images.
 
-The app looks for Wayback releases whose image changed at the map center and verifies actual CORONA image pixels before offering a capture. Wayback dates on the slider are **archive release dates**; the image acquisition date is shown separately when metadata is available. Imagery is not available for every year, and dates vary by location. CORONA Atlas coverage is limited; the panel offers a verified 1967 example in Cyprus. The overlays and lookups require Esri and University of Arkansas imagery services.
+The app looks for Wayback releases whose image changed at the map center and verifies actual CORONA image pixels before offering a capture. Wayback dates on the slider are **archive release dates**; the image acquisition date is shown separately when metadata is available. Imagery is not available for every year, and dates vary by location. When no 1960s or 1970s image exists for the current location, the panel says so without moving the map. The overlays and lookups require Esri and University of Arkansas imagery services.
 
 Imagery: [Esri World Imagery Wayback](https://livingatlas.arcgis.com/wayback/) and [CAST CORONA Atlas](https://cast.uark.edu/capabilities/corona.php), University of Arkansas. The compact CORONA block/date index is derived from [Iconem's historical imagery catalog](https://github.com/Iconem/terrain-viewer/blob/main/lib/corona-atlas-blocks.json). CAST makes its CORONA imagery available for **non-commercial use**; confirm permission before using those images on a commercial site. Esri imagery is subject to its own usage and attribution terms.
 

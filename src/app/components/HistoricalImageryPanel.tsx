@@ -130,13 +130,10 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
 
   useEffect(() => { overlayRef.current?.setOpacity(opacity); }, [opacity]);
 
-  const showExample = () => {
-    if (!map) return;
-    map.setCenter({ lat: 35.3847, lng: 33.8783 });
-    map.setZoom(13);
-  };
-
   const loading = coronaLoading || waybackLoading;
+  const selectTimelinePosition = (index: number) => {
+    setSelection(index === entries.length ? "present" : entries[index].key);
+  };
 
   return (
     <section
@@ -155,7 +152,6 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
       {!map || (loading && entries.length === 0) ? <p className="py-3 text-sm text-slate-300">جارٍ البحث عن صور متاحة لهذا الموقع…</p> : entries.length === 0 ? (
         <div className="space-y-3 py-2 text-sm text-slate-300">
           <p>{coronaFailed || waybackFailed ? "تعذّر تحميل بعض الأرشيفات. حرّك الخريطة أو حاول لاحقًا." : "لا توجد صور مؤكدة لمركز الخريطة هنا. حرّك الخريطة للبحث في مكان آخر."}</p>
-          <button type="button" onClick={showExample} className="rounded-lg border border-sky-400/40 px-3 py-2 text-xs font-bold text-sky-200 hover:bg-sky-400/10">جرّب صورة متاحة من عام 1967</button>
         </div>
       ) : (
         <div className="space-y-3">
@@ -173,10 +169,8 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
               min={0}
               max={entries.length}
               value={selectedIndex}
-              onChange={(event) => {
-                const index = Number(event.target.value);
-                setSelection(index === entries.length ? "present" : entries[index].key);
-              }}
+              onInput={(event) => selectTimelinePosition(Number(event.currentTarget.value))}
+              onChange={(event) => selectTimelinePosition(Number(event.currentTarget.value))}
               aria-label="اختيار تاريخ الصورة"
               aria-valuetext={selectedEntry ? `${formatDate(selectedEntry.date)}، ${selectedEntry.kind === "corona" ? "CORONA" : "إصدار Esri Wayback"}` : "الحاضر"}
               className="mt-2 w-full accent-sky-400"
@@ -192,6 +186,7 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
               <input type="range" min={0.15} max={1} step={0.05} value={opacity} onChange={(event) => setOpacity(Number(event.target.value))} aria-label="شفافية الصورة التاريخية" className="w-full accent-sky-400" />
             </label>
           )}
+          {!coronaLoading && coronaImages.length === 0 && !coronaFailed && <p className="text-xs text-slate-300">لا توجد صور CORONA من الستينات أو السبعينات لهذا الموقع في الأرشيف الحالي. الشريط يعرض صور هذا المكان فقط.</p>}
           {(coronaFailed || waybackFailed) && <p className="text-xs text-amber-200">تعذّر التحقق من بعض الصور في الأرشيف؛ التواريخ المعروضة هي المتاحة حاليًا.</p>}
         </div>
       )}
@@ -199,7 +194,6 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
       <p className="mt-4 border-t border-white/10 pt-3 text-[11px] leading-relaxed text-slate-400">
         التواريخ المتاحة تختلف حسب الموقع وقد تفصلها سنوات. المصادر: <a className="text-sky-300 underline" href="https://livingatlas.arcgis.com/wayback/" target="_blank" rel="noopener noreferrer">Esri World Imagery Wayback</a> و<a className="text-sky-300 underline" href="https://cast.uark.edu/capabilities/corona.php" target="_blank" rel="noopener noreferrer">أطلس CORONA بجامعة أركنساس</a>. صور CORONA للاستخدام غير التجاري فقط.
       </p>
-      {entries.length > 0 && <button type="button" onClick={showExample} className="mt-2 text-[11px] text-sky-300 underline">الانتقال إلى مثال من عام 1967</button>}
     </section>
   );
 }
