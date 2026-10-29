@@ -12,6 +12,8 @@ import type { EarthMarker, PlaceDetails, DroppedPin } from "@/types";
 import PlaceInfoPanel from "@/components/PlaceInfoPanel";
 import RoutePanel from "@/components/RoutePanel";
 
+const HistoricalImageryPanel = React.lazy(() => import("@/components/HistoricalImageryPanel"));
+
 function getResponsiveDistanceMultiplier(size: { width: number; height: number }) {
   const aspect = size.width / Math.max(size.height, 1);
   if (aspect < 0.72 || size.width < 640) return 1.55;
@@ -21,6 +23,8 @@ function getResponsiveDistanceMultiplier(size: { width: number; height: number }
 
 const ROAD_MAP_ENTER_DISTANCE = 1.62;
 const ROAD_MAP_EXIT_DISTANCE = 1.82;
+const ROAD_MAP_INITIAL_ZOOM = 13;
+const EARTH_FOCUS_DISTANCE = 1.95;
 
 function cameraPositionToLatLng(position: THREE.Vector3) {
   const normalized = position.clone().normalize();
@@ -311,6 +315,8 @@ function RoadMapZoomBridge({
 function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; center: { lat: number; lng: number }; onClose: () => void }) {
   const mapElRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
+  const [mapInstance, setMapInstance] = useState<google.maps.Map | null>(null);
+  const wasActiveRef = useRef(false);
   const droppedPinMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const myLocationMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const directionsRendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
@@ -327,6 +333,9 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
   const [isLoadingPlace, setIsLoadingPlace] = React.useState(false);
   const [droppedPin, setDroppedPin] = React.useState<DroppedPin | null>(null);
   const [showRoutePanel, setShowRoutePanel] = React.useState(false);
+  const [historicalOpen, setHistoricalOpen] = React.useState(false);
+
+  useEffect(() => { if (!active) setHistoricalOpen(false); }, [active]);
 
   // فتح/إغلاق لوحة المسار مع تزامن الـ store
   const openRoutePanel = () => { setShowRoutePanel(true); setRouteActive(true); };
@@ -352,18 +361,22 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
   // ── إنشاء الخريطة ──
   useEffect(() => {
     let cancelled = false;
+    const entering = active && !wasActiveRef.current;
+    wasActiveRef.current = active;
     if (!active || !mapElRef.current) return;
+    if (entering) mapRef.current?.setZoom(ROAD_MAP_INITIAL_ZOOM);
 
     initGoogleMaps().then(async () => {
       if (cancelled || !mapElRef.current || !window.google?.maps) return;
 
       if (!mapRef.current) {
         const map = new google.maps.Map(mapElRef.current, {
-          center, zoom: 16, mapId: "DEMO_MAP_ID",
+          center, zoom: ROAD_MAP_INITIAL_ZOOM, mapId: "DEMO_MAP_ID",
           mapTypeId: mapType === "roadmap" ? google.maps.MapTypeId.ROADMAP : google.maps.MapTypeId.HYBRID,
           disableDefaultUI: true, clickableIcons: true, gestureHandling: "greedy",
         });
         mapRef.current = map;
+        setMapInstance(map);
 
         directionsRendererRef.current = new google.maps.DirectionsRenderer({
           map, suppressMarkers: false,
@@ -395,7 +408,6 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
 
       } else {
         mapRef.current.setCenter(center);
-        mapRef.current.setZoom(Math.max(mapRef.current.getZoom() ?? 16, 15));
         mapRef.current.setMapTypeId(mapType === "roadmap" ? google.maps.MapTypeId.ROADMAP : google.maps.MapTypeId.HYBRID);
       }
       setLoadError(null);
@@ -545,6 +557,9 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
           <button onClick={() => setMapType(mapType === "roadmap" ? "hybrid" : "roadmap")} className="w-full rounded-lg py-1.5 text-xs font-bold text-sky-200 transition-colors hover:bg-sky-400/15 flex items-center justify-center gap-1" style={{ border: "1px solid rgba(56,189,248,0.24)", cursor: "pointer" }}>
             {mapType === "roadmap" ? "🛰️ قمر صناعي" : "🗺️ خريطة طرق"}
           </button>
+          <button type="button" disabled={!mapInstance} onClick={() => { if (!historicalOpen) setMapType("hybrid"); setHistoricalOpen((open) => !open); }} aria-expanded={historicalOpen} className="w-full rounded-lg py-1.5 text-xs font-bold text-sky-200 transition-colors hover:bg-sky-400/15 disabled:cursor-not-allowed disabled:opacity-50" style={{ border: "1px solid rgba(56,189,248,0.24)", cursor: mapInstance ? "pointer" : "not-allowed" }}>
+            🕰️ {historicalOpen ? "إغلاق الصور القديمة" : "صور تاريخية"}
+          </button>
           <button onClick={onClose} className="w-full rounded-lg py-1.5 text-xs font-bold text-sky-200 transition-colors hover:bg-sky-400/15 flex items-center justify-center gap-1" style={{ border: "1px solid rgba(56,189,248,0.24)", cursor: "pointer" }}>
             🌍 رجوع للأرض
           </button>
@@ -554,6 +569,12 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
           <p className="text-sky-300/40 text-[10px] text-center" style={{ direction: "rtl" }}>انقر على مكان لعرض معلوماته</p>
         </div>
       </div>
+
+      {historicalOpen && active && (
+        <Suspense fallback={null}>
+          <HistoricalImageryPanel map={mapInstance} onClose={() => setHistoricalOpen(false)} />
+        </Suspense>
+      )}
 
       {/* لوحة معلومات المكان */}
       {(isLoadingPlace || placeDetails) && (
@@ -1169,7 +1190,7 @@ function Scene({
       </Suspense>
       <FlyToCamera
         targetName={selectedPlanet?.nameAr ?? null}
-        distance={(selectedPlanet?.radius ?? 1) * 6}
+        distance={selectedPlanet?.nameAr === "الأرض" ? EARTH_FOCUS_DISTANCE * distanceMultiplier : (selectedPlanet?.radius ?? 1) * 6}
         onArrived={onArrived}
         ctrlRef={ctrlRef}
       />

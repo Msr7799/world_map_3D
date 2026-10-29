@@ -33,6 +33,7 @@ An interactive 3D experience for exploring Earth and the Solar System, with geog
 - Coordinate search, geocoding, reverse geocoding, and markers positioned directly on the globe.
 - Browser geolocation displayed as a pulsing blue location marker.
 - Automatic transition to Google Maps near the surface, with roadmap and satellite views.
+- Historical imagery control on the map: shows available 1963–1972 CORONA captures at the current location, a date slider, and an opacity comparison with today's map.
 - Destination selection and handoff to Google Maps for driving or walking navigation.
 - Interactive Sun, Moon, and all eight planets, including orbital motion, summaries, and quick facts.
 - Controls for auto-rotation, motion speed, zoom, clouds, atmosphere, coordinate grid, and night mode.
@@ -41,6 +42,12 @@ An interactive 3D experience for exploring Earth and the Solar System, with geog
 ## Day, night, and Sun direction
 
 The app derives the Sun's position from the current UTC time and day of the year, including seasonal solar declination, and uses that direction to illuminate the globe. This places sunlight on the correct daytime side while nighttime city lights remain visible on the dark side. The model is intended for an interactive visual simulation; it is an astronomical approximation, not a scientific ephemeris or navigation instrument.
+
+## Historical imagery coverage
+
+Open the road map and choose **Historical imagery**. The app checks which georeferenced CORONA Atlas images actually cover the map center and shows their capture dates. Move the map to search another area. Coverage is limited; a missing image is reported rather than replaced with an unrelated year. The sample button moves to a verified 1967 image in Cyprus. The overlay and coverage lookup require the University of Arkansas CAST imagery service to be available.
+
+Imagery: [CAST CORONA Atlas](https://cast.uark.edu/capabilities/corona.php), University of Arkansas. The compact block/date index is derived from [Iconem's historical imagery catalog](https://github.com/Iconem/terrain-viewer/blob/main/lib/corona-atlas-blocks.json). CAST makes its imagery available for **non-commercial use**; confirm permission before using this feature on a commercial site.
 
 ## Technology
 
