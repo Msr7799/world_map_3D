@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { availableCoronaImages, coronaTileUrl, type CoronaImage } from "@/lib/corona";
-import { availableBahrainImages, bahrainTileUrl, type BahrainImage } from "@/lib/mapbh";
+import { availableBahrainImages, bahrainTileView, type BahrainImage } from "@/lib/mapbh";
 import { availableWaybackImages, waybackCaptureMetadata, waybackTileUrl, type WaybackItem, type WaybackMetadata } from "@/lib/wayback";
 
 type Position = { lat: number; lng: number; zoom: number };
@@ -10,6 +10,44 @@ type TimelineEntry =
   | { key: string; date: string; kind: "corona"; image: CoronaImage }
   | { key: string; date: string; kind: "mapbh"; image: BahrainImage }
   | { key: string; date: string; kind: "wayback"; image: WaybackItem };
+
+type AdjustableMapType = google.maps.MapType & { setOpacity(value: number): void };
+
+function createBahrainOverlay(image: BahrainImage, initialOpacity: number): AdjustableMapType {
+  const tiles = new Set<HTMLDivElement>();
+  let currentOpacity = initialOpacity;
+  return {
+    alt: null,
+    maxZoom: 22,
+    minZoom: 0,
+    name: null,
+    projection: null,
+    radius: 6378137,
+    tileSize: new google.maps.Size(256, 256),
+    getTile(coord, zoom, ownerDocument) {
+      const tile = ownerDocument.createElement("div");
+      tile.style.width = "256px";
+      tile.style.height = "256px";
+      tile.style.opacity = String(currentOpacity);
+      const view = bahrainTileView(image, coord.x, coord.y, zoom);
+      if (view) {
+        tile.style.backgroundImage = `url("${view.url}")`;
+        tile.style.backgroundRepeat = "no-repeat";
+        tile.style.backgroundSize = `${256 * view.scale}px ${256 * view.scale}px`;
+        tile.style.backgroundPosition = `${-256 * view.offsetX}px ${-256 * view.offsetY}px`;
+      }
+      tiles.add(tile);
+      return tile;
+    },
+    releaseTile(tile) {
+      tiles.delete(tile as HTMLDivElement);
+    },
+    setOpacity(value) {
+      currentOpacity = value;
+      for (const tile of tiles) tile.style.opacity = String(value);
+    },
+  };
+}
 
 function formatDate(date: string) {
   if (/^\d{4}$/.test(date)) return date;
@@ -40,7 +78,7 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
   const [waybackFailed, setWaybackFailed] = useState(false);
   const [captureMetadata, setCaptureMetadata] = useState<WaybackMetadata | null>(null);
   const [metadataResolved, setMetadataResolved] = useState(false);
-  const overlayRef = useRef<google.maps.ImageMapType | null>(null);
+  const overlayRef = useRef<AdjustableMapType | null>(null);
   const prefetchedTilesRef = useRef(new Map<string, HTMLImageElement>());
 
   const positionKey = position ? `${position.lat.toFixed(5)}/${position.lng.toFixed(5)}/${position.zoom}` : null;
@@ -125,16 +163,16 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
 
   useEffect(() => {
     if (!map || !selectedEntry) return;
-    const overlay = new google.maps.ImageMapType({
-      tileSize: new google.maps.Size(256, 256),
-      opacity,
-      maxZoom: selectedEntry.kind === "mapbh" ? selectedEntry.image.maxZoom : 22,
-      getTileUrl: (tile, zoom) => selectedEntry.kind === "corona"
-        ? coronaTileUrl(selectedEntry.image, tile.x, tile.y, zoom)
-        : selectedEntry.kind === "mapbh"
-          ? bahrainTileUrl(selectedEntry.image, tile.x, tile.y, zoom)
+    const overlay: AdjustableMapType = selectedEntry.kind === "mapbh"
+      ? createBahrainOverlay(selectedEntry.image, opacity)
+      : new google.maps.ImageMapType({
+        tileSize: new google.maps.Size(256, 256),
+        opacity,
+        maxZoom: 22,
+        getTileUrl: (tile, zoom) => selectedEntry.kind === "corona"
+          ? coronaTileUrl(selectedEntry.image, tile.x, tile.y, zoom)
           : waybackTileUrl(selectedEntry.image, tile.x, tile.y, zoom),
-    });
+      });
     map.overlayMapTypes.push(overlay);
     overlayRef.current = overlay;
     return () => {
@@ -163,7 +201,7 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
       for (const neighbor of [entries[index - 1], entries[index + 1]]) {
         if (!neighbor || neighbor.kind === "corona") continue;
         const url = neighbor.kind === "mapbh"
-          ? bahrainTileUrl(neighbor.image, x, y, zoom)
+          ? bahrainTileView(neighbor.image, x, y, zoom)?.url
           : waybackTileUrl(neighbor.image, x, y, zoom);
         if (!url || prefetchedTilesRef.current.has(url)) continue;
         const image = new Image();
@@ -220,7 +258,7 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
             </div>
             {selectedEntry?.kind === "wayback" && <p className="mt-1 text-[11px] text-slate-400">تاريخ إصدار الأرشيف · {captureMetadata?.date ? `التُقطت الصورة: ${formatTimestamp(captureMetadata.date)}` : metadataResolved ? "تاريخ الالتقاط غير متاح" : "جارٍ التحقق من تاريخ الالتقاط"}{captureMetadata?.provider ? ` · ${captureMetadata.provider}` : ""}</p>}
             {selectedEntry?.kind === "corona" && <p className="mt-1 text-[11px] text-slate-400">تاريخ التقاط صورة CORONA</p>}
-            {selectedEntry?.kind === "mapbh" && <p className="mt-1 text-[11px] text-slate-400">{selectedEntry.image.type === "photo" ? "تاريخ التقاط صورة فضائية للبحرين" : "سنة إصدار خريطة مرسومة للبحرين"} · التغطية محدودة بحدود المصدر{mapZoom > selectedEntry.image.maxZoom ? ` · صغّر الخريطة إلى مستوى ${selectedEntry.image.maxZoom} لعرضها` : ""}</p>}
+            {selectedEntry?.kind === "mapbh" && <p className="mt-1 text-[11px] text-slate-400">{selectedEntry.image.type === "photo" ? "تاريخ التقاط صورة فضائية للبحرين" : "سنة إصدار خريطة مرسومة للبحرين"} · التغطية محدودة بحدود المصدر{mapZoom > selectedEntry.image.maxZoom ? ` · الصورة مكبّرة من مستوى ${selectedEntry.image.maxZoom} وقد تقل حدتها` : ""}{mapZoom < selectedEntry.image.minZoom ? ` · كبّر الخريطة إلى مستوى ${selectedEntry.image.minZoom} لعرضها` : ""}</p>}
             <p className="mt-3 text-xs text-slate-300">اسحب الشريط للرجوع إلى الصور الأقدم أو العودة إلى الحاضر</p>
             <input
               type="range"
