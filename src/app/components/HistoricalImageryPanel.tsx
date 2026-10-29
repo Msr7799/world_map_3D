@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { availableCoronaImages, coronaTileUrl, type CoronaImage } from "@/lib/corona";
+import { availableBahrainImages, bahrainTileUrl, type BahrainImage } from "@/lib/mapbh";
 import { availableWaybackImages, waybackCaptureMetadata, waybackTileUrl, type WaybackItem, type WaybackMetadata } from "@/lib/wayback";
 
 type Position = { lat: number; lng: number; zoom: number };
 type TimelineEntry =
   | { key: string; date: string; kind: "corona"; image: CoronaImage }
+  | { key: string; date: string; kind: "mapbh"; image: BahrainImage }
   | { key: string; date: string; kind: "wayback"; image: WaybackItem };
 
 function formatDate(date: string) {
@@ -23,6 +25,7 @@ function formatTimestamp(timestamp: number) {
 
 export default function HistoricalImageryPanel({ map, onClose }: { map: google.maps.Map | null; onClose: () => void }) {
   const [position, setPosition] = useState<Position | null>(null);
+  const [mapZoom, setMapZoom] = useState(13);
   const [coronaImages, setCoronaImages] = useState<CoronaImage[]>([]);
   const [waybackImages, setWaybackImages] = useState<WaybackItem[]>([]);
   const [selection, setSelection] = useState("auto");
@@ -40,7 +43,9 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
     const updatePosition = () => {
       const center = map.getCenter();
       if (!center) return;
-      const next = { lat: center.lat(), lng: center.lng(), zoom: Math.max(11, Math.min(15, map.getZoom() ?? 13)) };
+      const currentZoom = map.getZoom() ?? 13;
+      setMapZoom(currentZoom);
+      const next = { lat: center.lat(), lng: center.lng(), zoom: Math.max(11, Math.min(15, currentZoom)) };
       setPosition((previous) => previous && Math.abs(previous.lat - next.lat) < 0.005 && Math.abs(previous.lng - next.lng) < 0.005 && previous.zoom === next.zoom
         ? previous : next);
     };
@@ -85,8 +90,9 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
 
   const entries = useMemo<TimelineEntry[]>(() => [
     ...coronaImages.map((image) => ({ key: `corona:${image.id}`, date: image.date, kind: "corona" as const, image })),
+    ...(position ? availableBahrainImages(position.lat, position.lng).map((image) => ({ key: `mapbh:${image.id}`, date: image.date, kind: "mapbh" as const, image })) : []),
     ...waybackImages.map((image) => ({ key: `wayback:${image.releaseNum}`, date: image.releaseDateLabel, kind: "wayback" as const, image })),
-  ].sort((a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key)), [coronaImages, waybackImages]);
+  ].sort((a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key)), [coronaImages, position, waybackImages]);
 
   const selectedEntry = selection === "auto" ? entries[entries.length - 1] : entries.find((entry) => entry.key === selection);
   const selectedIndex = selectedEntry ? entries.indexOf(selectedEntry) : entries.length;
@@ -111,10 +117,12 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
     const overlay = new google.maps.ImageMapType({
       tileSize: new google.maps.Size(256, 256),
       opacity,
-      maxZoom: 22,
+      maxZoom: selectedEntry.kind === "mapbh" ? selectedEntry.image.maxZoom : 22,
       getTileUrl: (tile, zoom) => selectedEntry.kind === "corona"
         ? coronaTileUrl(selectedEntry.image, tile.x, tile.y, zoom)
-        : waybackTileUrl(selectedEntry.image, tile.x, tile.y, zoom),
+        : selectedEntry.kind === "mapbh"
+          ? bahrainTileUrl(selectedEntry.image, tile.x, tile.y, zoom)
+          : waybackTileUrl(selectedEntry.image, tile.x, tile.y, zoom),
     });
     map.overlayMapTypes.push(overlay);
     overlayRef.current = overlay;
@@ -159,10 +167,11 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
           <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
             <div className="flex items-center justify-between gap-2 text-sm">
               <strong className="text-sky-200">{selectedEntry ? formatDate(selectedEntry.date) : "الحاضر"}</strong>
-              <span className="text-xs text-slate-400" dir="ltr">{selectedEntry?.kind === "corona" ? "CORONA" : selectedEntry?.kind === "wayback" ? "Esri Wayback" : "Google Maps"}</span>
+              <span className="text-xs text-slate-400" dir="ltr">{selectedEntry?.kind === "corona" ? "CORONA" : selectedEntry?.kind === "mapbh" ? "mapBH / USGS" : selectedEntry?.kind === "wayback" ? "Esri Wayback" : "Google Maps"}</span>
             </div>
             {selectedEntry?.kind === "wayback" && <p className="mt-1 text-[11px] text-slate-400">تاريخ إصدار الأرشيف · {captureMetadata?.date ? `التُقطت الصورة: ${formatTimestamp(captureMetadata.date)}` : metadataResolved ? "تاريخ الالتقاط غير متاح" : "جارٍ التحقق من تاريخ الالتقاط"}{captureMetadata?.provider ? ` · ${captureMetadata.provider}` : ""}</p>}
             {selectedEntry?.kind === "corona" && <p className="mt-1 text-[11px] text-slate-400">تاريخ التقاط صورة CORONA</p>}
+            {selectedEntry?.kind === "mapbh" && <p className="mt-1 text-[11px] text-slate-400">تاريخ التقاط صورة أرشيفية للبحرين · تغطية الصورة محدودة بحدودها الأصلية{mapZoom > selectedEntry.image.maxZoom ? ` · صغّر الخريطة إلى مستوى ${selectedEntry.image.maxZoom} لعرضها` : ""}</p>}
             <p className="mt-3 text-xs text-slate-300">اسحب الشريط للرجوع إلى الصور الأقدم أو العودة إلى الحاضر</p>
             <input
               type="range"
@@ -172,7 +181,7 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
               onInput={(event) => selectTimelinePosition(Number(event.currentTarget.value))}
               onChange={(event) => selectTimelinePosition(Number(event.currentTarget.value))}
               aria-label="اختيار تاريخ الصورة"
-              aria-valuetext={selectedEntry ? `${formatDate(selectedEntry.date)}، ${selectedEntry.kind === "corona" ? "CORONA" : "إصدار Esri Wayback"}` : "الحاضر"}
+              aria-valuetext={selectedEntry ? `${formatDate(selectedEntry.date)}، ${selectedEntry.kind === "corona" ? "CORONA" : selectedEntry.kind === "mapbh" ? "صورة أرشيفية للبحرين" : "إصدار Esri Wayback"}` : "الحاضر"}
               className="mt-2 w-full accent-sky-400"
             />
             <div className="flex justify-between text-[11px] text-slate-400">
@@ -186,13 +195,13 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
               <input type="range" min={0.15} max={1} step={0.05} value={opacity} onChange={(event) => setOpacity(Number(event.target.value))} aria-label="شفافية الصورة التاريخية" className="w-full accent-sky-400" />
             </label>
           )}
-          {!coronaLoading && coronaImages.length === 0 && !coronaFailed && <p className="text-xs text-slate-300">لا توجد صور CORONA من الستينات أو السبعينات لهذا الموقع في الأرشيف الحالي. الشريط يعرض صور هذا المكان فقط.</p>}
+          {!coronaLoading && coronaImages.length === 0 && !coronaFailed && !entries.some((entry) => entry.kind === "mapbh") && <p className="text-xs text-slate-300">لا توجد صور من الستينات أو السبعينات لهذا الموقع في الأرشيف الحالي. الشريط يعرض صور هذا المكان فقط.</p>}
           {(coronaFailed || waybackFailed) && <p className="text-xs text-amber-200">تعذّر التحقق من بعض الصور في الأرشيف؛ التواريخ المعروضة هي المتاحة حاليًا.</p>}
         </div>
       )}
 
       <p className="mt-4 border-t border-white/10 pt-3 text-[11px] leading-relaxed text-slate-400">
-        التواريخ المتاحة تختلف حسب الموقع وقد تفصلها سنوات. المصادر: <a className="text-sky-300 underline" href="https://livingatlas.arcgis.com/wayback/" target="_blank" rel="noopener noreferrer">Esri World Imagery Wayback</a> و<a className="text-sky-300 underline" href="https://cast.uark.edu/capabilities/corona.php" target="_blank" rel="noopener noreferrer">أطلس CORONA بجامعة أركنساس</a>. صور CORONA للاستخدام غير التجاري فقط.
+        التواريخ المتاحة تختلف حسب الموقع وقد تفصلها سنوات. المصادر: <a className="text-sky-300 underline" href="https://www.mapbh.org/en/map" target="_blank" rel="noopener noreferrer">mapBH / USGS</a>، <a className="text-sky-300 underline" href="https://livingatlas.arcgis.com/wayback/" target="_blank" rel="noopener noreferrer">Esri World Imagery Wayback</a> و<a className="text-sky-300 underline" href="https://cast.uark.edu/capabilities/corona.php" target="_blank" rel="noopener noreferrer">أطلس CORONA بجامعة أركنساس</a>. صور أطلس CORONA للاستخدام غير التجاري فقط.
       </p>
     </section>
   );
