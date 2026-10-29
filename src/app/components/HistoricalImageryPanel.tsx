@@ -11,11 +11,27 @@ type TimelineEntry =
   | { key: string; date: string; kind: "mapbh"; image: BahrainImage }
   | { key: string; date: string; kind: "wayback"; image: WaybackItem };
 
-type AdjustableMapType = google.maps.MapType & { setOpacity(value: number): void };
+function createArchiveBackdrop(): google.maps.MapType {
+  return {
+    alt: null,
+    maxZoom: 22,
+    minZoom: 0,
+    name: null,
+    projection: null,
+    radius: 6378137,
+    tileSize: new google.maps.Size(256, 256),
+    getTile(_coord, _zoom, ownerDocument) {
+      const tile = ownerDocument.createElement("div");
+      tile.style.width = "256px";
+      tile.style.height = "256px";
+      tile.style.backgroundColor = "#e5e1d8";
+      return tile;
+    },
+    releaseTile() {},
+  };
+}
 
-function createBahrainOverlay(image: BahrainImage, initialOpacity: number): AdjustableMapType {
-  const tiles = new Set<HTMLDivElement>();
-  let currentOpacity = initialOpacity;
+function createBahrainOverlay(image: BahrainImage): google.maps.MapType {
   return {
     alt: null,
     maxZoom: 22,
@@ -28,7 +44,6 @@ function createBahrainOverlay(image: BahrainImage, initialOpacity: number): Adju
       const tile = ownerDocument.createElement("div");
       tile.style.width = "256px";
       tile.style.height = "256px";
-      tile.style.opacity = String(currentOpacity);
       const view = bahrainTileView(image, coord.x, coord.y, zoom);
       if (view) {
         tile.style.backgroundImage = `url("${view.url}")`;
@@ -36,16 +51,9 @@ function createBahrainOverlay(image: BahrainImage, initialOpacity: number): Adju
         tile.style.backgroundSize = `${256 * view.scale}px ${256 * view.scale}px`;
         tile.style.backgroundPosition = `${-256 * view.offsetX}px ${-256 * view.offsetY}px`;
       }
-      tiles.add(tile);
       return tile;
     },
-    releaseTile(tile) {
-      tiles.delete(tile as HTMLDivElement);
-    },
-    setOpacity(value) {
-      currentOpacity = value;
-      for (const tile of tiles) tile.style.opacity = String(value);
-    },
+    releaseTile() {},
   };
 }
 
@@ -71,14 +79,12 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
   const [selection, setSelection] = useState("present");
   const [coronaResultKey, setCoronaResultKey] = useState<string | null>(null);
   const [waybackResultKey, setWaybackResultKey] = useState<string | null>(null);
-  const [opacity, setOpacity] = useState(0.8);
   const [coronaLoading, setCoronaLoading] = useState(true);
   const [waybackLoading, setWaybackLoading] = useState(true);
   const [coronaFailed, setCoronaFailed] = useState(false);
   const [waybackFailed, setWaybackFailed] = useState(false);
   const [captureMetadata, setCaptureMetadata] = useState<WaybackMetadata | null>(null);
   const [metadataResolved, setMetadataResolved] = useState(false);
-  const overlayRef = useRef<AdjustableMapType | null>(null);
   const prefetchedTilesRef = useRef(new Map<string, HTMLImageElement>());
 
   const positionKey = position ? `${position.lat.toFixed(5)}/${position.lng.toFixed(5)}/${position.zoom}` : null;
@@ -161,31 +167,40 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
     return () => { disposed = true; window.clearTimeout(timeout); };
   }, [position, selectedRelease]);
 
+  const hasHistoricalSelection = Boolean(selectedEntry);
+
+  // A solid archive canvas prevents modern imagery from showing through
+  // transparent archive pixels or gaps between historical coverage tiles.
+  useEffect(() => {
+    if (!map || !hasHistoricalSelection) return;
+    const backdrop = createArchiveBackdrop();
+    map.overlayMapTypes.push(backdrop);
+    return () => {
+      for (let i = map.overlayMapTypes.getLength() - 1; i >= 0; i -= 1) {
+        if (map.overlayMapTypes.getAt(i) === backdrop) map.overlayMapTypes.removeAt(i);
+      }
+    };
+  }, [map, hasHistoricalSelection]);
+
   useEffect(() => {
     if (!map || !selectedEntry) return;
-    const overlay: AdjustableMapType = selectedEntry.kind === "mapbh"
-      ? createBahrainOverlay(selectedEntry.image, opacity)
+    const overlay: google.maps.MapType = selectedEntry.kind === "mapbh"
+      ? createBahrainOverlay(selectedEntry.image)
       : new google.maps.ImageMapType({
         tileSize: new google.maps.Size(256, 256),
-        opacity,
+        opacity: 1,
         maxZoom: 22,
         getTileUrl: (tile, zoom) => selectedEntry.kind === "corona"
           ? coronaTileUrl(selectedEntry.image, tile.x, tile.y, zoom)
           : waybackTileUrl(selectedEntry.image, tile.x, tile.y, zoom),
       });
     map.overlayMapTypes.push(overlay);
-    overlayRef.current = overlay;
     return () => {
       for (let i = map.overlayMapTypes.getLength() - 1; i >= 0; i -= 1) {
         if (map.overlayMapTypes.getAt(i) === overlay) map.overlayMapTypes.removeAt(i);
       }
-      if (overlayRef.current === overlay) overlayRef.current = null;
     };
-    // Opacity updates the existing overlay without reloading its tiles.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, selectedEntry]);
-
-  useEffect(() => { overlayRef.current?.setOpacity(opacity); }, [opacity]);
 
   // Warm the center tile for the next timeline step without downloading a
   // full historical layer. Browser image caching handles repeat visits.
@@ -280,12 +295,6 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
               <button type="button" onClick={() => setSelection("present")} className="text-sky-300 underline">العودة للحاضر</button>
             </div>
           </div>
-          {selectedEntry && (
-            <label className="flex items-center gap-3 text-xs text-slate-300">
-              <span className="shrink-0">مقارنة بالحاضر</span>
-              <input type="range" min={0.15} max={1} step={0.05} value={opacity} onChange={(event) => setOpacity(Number(event.target.value))} aria-label="شفافية الصورة التاريخية" className="w-full accent-sky-400" />
-            </label>
-          )}
           {mode === "photo" && !coronaLoading && coronaImages.length === 0 && !coronaFailed && !entries.some((entry) => entry.kind === "mapbh") && <p className="text-xs text-slate-300">لا توجد صور من الستينات أو السبعينات لهذا الموقع في الأرشيف الحالي. الشريط يعرض صور هذا المكان فقط.</p>}
           {mode === "photo" && (coronaFailed || waybackFailed) && <p className="text-xs text-amber-200">تعذّر التحقق من بعض الصور في الأرشيف؛ التواريخ المعروضة هي المتاحة حاليًا.</p>}
         </div>

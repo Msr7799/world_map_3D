@@ -33,7 +33,7 @@ An interactive 3D experience for exploring Earth and the Solar System, with geog
 - Coordinate search, geocoding, reverse geocoding, and markers positioned directly on the globe.
 - Browser geolocation displayed as a pulsing blue location marker.
 - Automatic transition to Google Maps near the surface, with roadmap and satellite views.
-- Historical imagery control on the map: combines georeferenced Bahrain satellite images from 1965, 1967, 1968, 1976, and 1982 via mapBH/USGS with available CORONA Atlas captures and Esri World Imagery Wayback releases since 2014. A separate historical maps mode shows drawn Bahrain maps from 1977, 1986, 1990, and 1997. A draggable timeline and opacity control compare them with today's map.
+- Historical imagery control on the map: combines georeferenced Bahrain satellite images from 1965, 1967, 1968, 1976, and 1982 via mapBH/USGS with available CORONA Atlas captures and Esri World Imagery Wayback releases since 2014. A separate historical maps mode shows drawn Bahrain maps from 1977, 1986, 1990, and 1997. A draggable timeline shows each old layer at full opacity without blending it with today's map.
 - Destination selection and handoff to Google Maps for driving or walking navigation.
 - Interactive Sun, Moon, and all eight planets, including orbital motion, summaries, and quick facts.
 - Controls for auto-rotation, motion speed, zoom, clouds, atmosphere, coordinate grid, and night mode.
@@ -47,7 +47,7 @@ The app derives the Sun's position from the current UTC time and day of the year
 
 1. Zoom into Earth until Google Maps opens, then choose **Historical imagery**. The map switches to a modern satellite view for comparison.
 2. Choose **Satellite images** for mapBH/USGS, CORONA, and Wayback imagery, or **Historical maps** for drawn maps from the 1970s through 1990s. **Drag the timeline slider** to update the layer and date at the same location, or toward **Present** to show only the current map. The slider does not move the map.
-3. Adjust the **Compare with present** slider to change the old image's opacity. Pan to another location to refresh the available dates and images.
+3. Historical imagery is shown at full opacity over a neutral canvas, without blending it with the modern map or its labels. Choose **Present** to return to current imagery. Pan to another location to refresh the available dates and images.
 
 The app looks for Wayback releases whose image changed at the map center and verifies actual CORONA Atlas image pixels before offering a capture. Five georeferenced mapBH images and four drawn maps are shown when the map center falls within their published bounds. Each layer has limited geographic coverage and a maximum source zoom. Above that zoom, the matching part of the highest available tile is enlarged in place, so image sharpness may fall without moving the map. Wayback dates on the slider are **archive release dates**; the image acquisition date is shown separately when metadata is available. Drawn map years are **publication years**, not satellite acquisition dates. Imagery is not available for every year, and dates vary by location. When no 1960s or 1970s image exists for the current location, the panel says so without moving the map. The overlays and lookups require mapBH, Esri, and University of Arkansas imagery services.
 

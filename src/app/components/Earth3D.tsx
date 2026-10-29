@@ -372,7 +372,7 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
       if (!mapRef.current) {
         const map = new google.maps.Map(mapElRef.current, {
           center, zoom: ROAD_MAP_INITIAL_ZOOM, mapId: "DEMO_MAP_ID",
-          mapTypeId: mapType === "roadmap" ? google.maps.MapTypeId.ROADMAP : google.maps.MapTypeId.HYBRID,
+          mapTypeId: historicalOpen ? google.maps.MapTypeId.SATELLITE : mapType === "roadmap" ? google.maps.MapTypeId.ROADMAP : google.maps.MapTypeId.HYBRID,
           disableDefaultUI: true, clickableIcons: true, gestureHandling: "greedy",
         });
         mapRef.current = map;
@@ -408,7 +408,7 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
 
       } else {
         mapRef.current.setCenter(center);
-        mapRef.current.setMapTypeId(mapType === "roadmap" ? google.maps.MapTypeId.ROADMAP : google.maps.MapTypeId.HYBRID);
+        mapRef.current.setMapTypeId(historicalOpen ? google.maps.MapTypeId.SATELLITE : mapType === "roadmap" ? google.maps.MapTypeId.ROADMAP : google.maps.MapTypeId.HYBRID);
       }
       setLoadError(null);
     }).catch(() => { if (!cancelled) setLoadError("تعذر تحميل خرائط Google. تحقق من تفعيل Maps JavaScript API والمفتاح."); });
@@ -419,9 +419,9 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
 
   useEffect(() => {
     if (mapRef.current && window.google?.maps) {
-      mapRef.current.setMapTypeId(mapType === "roadmap" ? google.maps.MapTypeId.ROADMAP : google.maps.MapTypeId.HYBRID);
+      mapRef.current.setMapTypeId(historicalOpen ? google.maps.MapTypeId.SATELLITE : mapType === "roadmap" ? google.maps.MapTypeId.ROADMAP : google.maps.MapTypeId.HYBRID);
     }
-  }, [mapType]);
+  }, [mapType, historicalOpen]);
 
   // حقن أنيميشن النبض مرة واحدة فقط في الصفحة (نقطة "موقعي الحالي" الزرقاء)
   useEffect(() => {
@@ -553,11 +553,11 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
       {/* شريط الأدوات (يمين) */}
       <div className="absolute right-4 top-4 z-10 flex flex-col gap-2 sm:right-6">
         <div className="flex flex-col gap-2 rounded-xl p-3 shadow-2xl" style={{ direction: "rtl", background: "rgba(6,13,26,0.90)", backdropFilter: "blur(16px)", border: "1px solid rgba(56,189,248,0.22)", minWidth: 148 }}>
-          <div className="text-xs font-bold text-sky-300">{mapType === "roadmap" ? "🗺️ خريطة الطرق" : "🛰️ قمر صناعي"}</div>
-          <button onClick={() => setMapType(mapType === "roadmap" ? "hybrid" : "roadmap")} className="w-full rounded-lg py-1.5 text-xs font-bold text-sky-200 transition-colors hover:bg-sky-400/15 flex items-center justify-center gap-1" style={{ border: "1px solid rgba(56,189,248,0.24)", cursor: "pointer" }}>
-            {mapType === "roadmap" ? "🛰️ قمر صناعي" : "🗺️ خريطة طرق"}
+          <div className="text-xs font-bold text-sky-300">{historicalOpen ? "🕰️ صور تاريخية" : mapType === "roadmap" ? "🗺️ خريطة الطرق" : "🛰️ قمر صناعي"}</div>
+          <button onClick={() => { if (historicalOpen) { setHistoricalOpen(false); setMapType("roadmap"); } else setMapType(mapType === "roadmap" ? "hybrid" : "roadmap"); }} className="w-full rounded-lg py-1.5 text-xs font-bold text-sky-200 transition-colors hover:bg-sky-400/15 flex items-center justify-center gap-1" style={{ border: "1px solid rgba(56,189,248,0.24)", cursor: "pointer" }}>
+            {historicalOpen ? "🗺️ خريطة طرق" : mapType === "roadmap" ? "🛰️ قمر صناعي" : "🗺️ خريطة طرق"}
           </button>
-          <button type="button" disabled={!mapInstance} onClick={() => { if (!historicalOpen) setMapType("hybrid"); setHistoricalOpen((open) => !open); }} aria-expanded={historicalOpen} className="w-full rounded-lg py-1.5 text-xs font-bold text-sky-200 transition-colors hover:bg-sky-400/15 disabled:cursor-not-allowed disabled:opacity-50" style={{ border: "1px solid rgba(56,189,248,0.24)", cursor: mapInstance ? "pointer" : "not-allowed" }}>
+          <button type="button" disabled={!mapInstance} onClick={() => setHistoricalOpen((open) => !open)} aria-expanded={historicalOpen} className="w-full rounded-lg py-1.5 text-xs font-bold text-sky-200 transition-colors hover:bg-sky-400/15 disabled:cursor-not-allowed disabled:opacity-50" style={{ border: "1px solid rgba(56,189,248,0.24)", cursor: mapInstance ? "pointer" : "not-allowed" }}>
             🕰️ {historicalOpen ? "إغلاق الصور القديمة" : "صور تاريخية"}
           </button>
           <button onClick={onClose} className="w-full rounded-lg py-1.5 text-xs font-bold text-sky-200 transition-colors hover:bg-sky-400/15 flex items-center justify-center gap-1" style={{ border: "1px solid rgba(56,189,248,0.24)", cursor: "pointer" }}>
