@@ -30,7 +30,9 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
   const [mode, setMode] = useState<"photo" | "map">("photo");
   const [coronaImages, setCoronaImages] = useState<CoronaImage[]>([]);
   const [waybackImages, setWaybackImages] = useState<WaybackItem[]>([]);
-  const [selection, setSelection] = useState("auto");
+  const [selection, setSelection] = useState("present");
+  const [coronaResultKey, setCoronaResultKey] = useState<string | null>(null);
+  const [waybackResultKey, setWaybackResultKey] = useState<string | null>(null);
   const [opacity, setOpacity] = useState(0.8);
   const [coronaLoading, setCoronaLoading] = useState(true);
   const [waybackLoading, setWaybackLoading] = useState(true);
@@ -39,6 +41,9 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
   const [captureMetadata, setCaptureMetadata] = useState<WaybackMetadata | null>(null);
   const [metadataResolved, setMetadataResolved] = useState(false);
   const overlayRef = useRef<google.maps.ImageMapType | null>(null);
+  const prefetchedTilesRef = useRef(new Map<string, HTMLImageElement>());
+
+  const positionKey = position ? `${position.lat.toFixed(5)}/${position.lng.toFixed(5)}/${position.zoom}` : null;
 
   useEffect(() => {
     if (!map) return;
@@ -57,13 +62,13 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
   }, [map]);
 
   useEffect(() => {
-    if (!position) return;
+    if (!position || !positionKey || mode === "map") return;
     const controller = new AbortController();
     let disposed = false;
     const timeout = window.setTimeout(() => controller.abort(), 25000);
-    setCoronaImages([]);
-    setWaybackImages([]);
-    setSelection("auto");
+    setCoronaResultKey(null);
+    setWaybackResultKey(null);
+    setSelection("present");
     setCoronaLoading(true);
     setWaybackLoading(true);
     setCoronaFailed(false);
@@ -76,25 +81,29 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
         setCoronaFailed(failed > 0 || controller.signal.aborted);
       })
       .catch(() => { if (!disposed) setCoronaFailed(true); })
-      .finally(() => { if (!disposed) setCoronaLoading(false); });
+      .finally(() => { if (!disposed) { setCoronaResultKey(positionKey); setCoronaLoading(false); } });
 
-    availableWaybackImages(position.lat, position.lng, position.zoom, controller.signal)
-      .then((items) => { if (!disposed) setWaybackImages(items); })
-      .catch(() => { if (!disposed) setWaybackFailed(true); })
-      .finally(() => { if (!disposed) setWaybackLoading(false); });
+    // Wait briefly after map movement so repeated pans do not start costly scans.
+    const waybackDelay = window.setTimeout(() => {
+      availableWaybackImages(position.lat, position.lng, position.zoom, controller.signal)
+        .then((items) => { if (!disposed) setWaybackImages(items); })
+        .catch(() => { if (!disposed) setWaybackFailed(true); })
+        .finally(() => { if (!disposed) { setWaybackResultKey(positionKey); setWaybackLoading(false); } });
+    }, 300);
 
     return () => {
       disposed = true;
       window.clearTimeout(timeout);
+      window.clearTimeout(waybackDelay);
       controller.abort();
     };
-  }, [position]);
+  }, [position, positionKey, mode]);
 
   const entries = useMemo<TimelineEntry[]>(() => [
-    ...(mode === "photo" ? coronaImages.map((image) => ({ key: `corona:${image.id}`, date: image.date, kind: "corona" as const, image })) : []),
+    ...(mode === "photo" && coronaResultKey === positionKey ? coronaImages.map((image) => ({ key: `corona:${image.id}`, date: image.date, kind: "corona" as const, image })) : []),
     ...(position ? availableBahrainImages(position.lat, position.lng).filter((image) => image.type === mode).map((image) => ({ key: `mapbh:${image.id}`, date: image.date, kind: "mapbh" as const, image })) : []),
-    ...(mode === "photo" ? waybackImages.map((image) => ({ key: `wayback:${image.releaseNum}`, date: image.releaseDateLabel, kind: "wayback" as const, image })) : []),
-  ].sort((a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key)), [coronaImages, mode, position, waybackImages]);
+    ...(mode === "photo" && waybackResultKey === positionKey ? waybackImages.map((image) => ({ key: `wayback:${image.releaseNum}`, date: image.releaseDateLabel, kind: "wayback" as const, image })) : []),
+  ].sort((a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key)), [coronaImages, coronaResultKey, mode, position, positionKey, waybackImages, waybackResultKey]);
 
   const selectedEntry = selection === "auto" ? entries[entries.length - 1] : entries.find((entry) => entry.key === selection);
   const selectedIndex = selectedEntry ? entries.indexOf(selectedEntry) : entries.length;
@@ -140,7 +149,38 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
 
   useEffect(() => { overlayRef.current?.setOpacity(opacity); }, [opacity]);
 
-  const loading = mode === "photo" && (coronaLoading || waybackLoading);
+  // Warm the center tile for the next timeline step without downloading a
+  // full historical layer. Browser image caching handles repeat visits.
+  useEffect(() => {
+    if (!position || entries.length === 0) return;
+    const timeout = window.setTimeout(() => {
+      const zoom = Math.floor(mapZoom);
+      const count = 2 ** zoom;
+      const x = Math.floor((position.lng + 180) / 360 * count);
+      const y = Math.floor((1 - Math.asinh(Math.tan(position.lat * Math.PI / 180)) / Math.PI) / 2 * count);
+      const selectedIndex = entries.findIndex((entry) => entry.key === selection);
+      const index = selectedIndex < 0 ? entries.length : selectedIndex;
+      for (const neighbor of [entries[index - 1], entries[index + 1]]) {
+        if (!neighbor || neighbor.kind === "corona") continue;
+        const url = neighbor.kind === "mapbh"
+          ? bahrainTileUrl(neighbor.image, x, y, zoom)
+          : waybackTileUrl(neighbor.image, x, y, zoom);
+        if (!url || prefetchedTilesRef.current.has(url)) continue;
+        const image = new Image();
+        image.decoding = "async";
+        image.src = url;
+        prefetchedTilesRef.current.set(url, image);
+        if (prefetchedTilesRef.current.size > 48) {
+          const oldest = prefetchedTilesRef.current.keys().next().value;
+          if (oldest) prefetchedTilesRef.current.delete(oldest);
+        }
+      }
+    }, 180);
+    return () => window.clearTimeout(timeout);
+  }, [entries, mapZoom, position, selection]);
+
+  const loading = mode === "photo" && (coronaLoading || waybackLoading || coronaResultKey !== positionKey || waybackResultKey !== positionKey);
+  const bahrainCount = entries.filter((entry) => entry.kind === "mapbh").length;
   const selectTimelinePosition = (index: number) => {
     setSelection(index === entries.length ? "present" : entries[index].key);
   };
@@ -160,8 +200,8 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
       </div>
 
       <div className="mb-3 flex gap-2" role="group" aria-label="نوع الطبقة التاريخية">
-        <button type="button" aria-pressed={mode === "photo"} onClick={() => { setMode("photo"); setSelection("auto"); }} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${mode === "photo" ? "bg-sky-500 text-slate-950" : "border border-sky-400/30 text-sky-200"}`}>صور فضائية</button>
-        <button type="button" aria-pressed={mode === "map"} onClick={() => { setMode("map"); setSelection("auto"); }} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${mode === "map" ? "bg-sky-500 text-slate-950" : "border border-sky-400/30 text-sky-200"}`}>خرائط قديمة</button>
+        <button type="button" aria-pressed={mode === "photo"} onClick={() => { setMode("photo"); setSelection("present"); }} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${mode === "photo" ? "bg-sky-500 text-slate-950" : "border border-sky-400/30 text-sky-200"}`}>صور فضائية</button>
+        <button type="button" aria-pressed={mode === "map"} onClick={() => { setMode("map"); setSelection("present"); }} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${mode === "map" ? "bg-sky-500 text-slate-950" : "border border-sky-400/30 text-sky-200"}`}>خرائط قديمة</button>
       </div>
 
       {!map || (loading && entries.length === 0) ? <p className="py-3 text-sm text-slate-300">جارٍ البحث عن صور متاحة لهذا الموقع…</p> : entries.length === 0 ? (
@@ -170,7 +210,9 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
         </div>
       ) : (
         <div className="space-y-3">
-          <p className="text-xs text-slate-300">{entries.length} {mode === "map" ? entries.length === 1 ? "خريطة متاحة" : "خرائط متاحة" : entries.length === 1 ? "صورة متاحة" : "صور متاحة"} لهذا الموقع{loading ? " · جارٍ فحص المزيد…" : ""}</p>
+          <p className="text-xs text-slate-300" aria-live="polite">{entries.length} {mode === "map" ? entries.length === 1 ? "خريطة متاحة" : "خرائط متاحة" : entries.length === 1 ? "صورة متاحة" : "صور متاحة"} لهذا الموقع{loading ? " · جارٍ فحص المزيد…" : ""}</p>
+          {mode === "photo" && bahrainCount > 0 && <p className="text-[11px] text-emerald-300">صور البحرين القديمة جاهزة الآن ({bahrainCount}) · الأقدم {entries[0].date.slice(0, 4)}</p>}
+          {mode === "photo" && waybackResultKey !== positionKey && <p className="text-[11px] text-slate-400">جارٍ تحميل إصدارات Esri الأخرى في الخلفية؛ يمكنك سحب الشريط الآن.</p>}
           <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
             <div className="flex items-center justify-between gap-2 text-sm">
               <strong className="text-sky-200">{selectedEntry ? formatDate(selectedEntry.date) : "الحاضر"}</strong>
@@ -194,6 +236,10 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
             <div className="flex justify-between text-[11px] text-slate-400">
               <span>{entries[0].date.slice(0, 4)} · الأقدم</span>
               <span>الحاضر</span>
+            </div>
+            <div className="mt-2 flex justify-between text-[11px]">
+              <button type="button" onClick={() => setSelection(entries[0].key)} className="text-sky-300 underline">اعرض الأقدم ({entries[0].date.slice(0, 4)})</button>
+              <button type="button" onClick={() => setSelection("present")} className="text-sky-300 underline">العودة للحاضر</button>
             </div>
           </div>
           {selectedEntry && (
