@@ -33,7 +33,7 @@ An interactive 3D experience for exploring Earth and the Solar System, with geog
 - Coordinate search, geocoding, reverse geocoding, and markers positioned directly on the globe.
 - Browser geolocation displayed as a pulsing blue location marker.
 - Automatic transition to Google Maps near the surface, with roadmap and satellite views.
-- Historical imagery control on the map: shows available 1963–1972 CORONA captures at the current location, a slider from the present back to older imagery, and an opacity comparison with today's map.
+- Historical imagery control on the map: combines available 1963–1972 CORONA captures with Esri World Imagery Wayback releases since 2014, a draggable timeline through available images, and an opacity comparison with today's map.
 - Destination selection and handoff to Google Maps for driving or walking navigation.
 - Interactive Sun, Moon, and all eight planets, including orbital motion, summaries, and quick facts.
 - Controls for auto-rotation, motion speed, zoom, clouds, atmosphere, coordinate grid, and night mode.
@@ -46,12 +46,12 @@ The app derives the Sun's position from the current UTC time and day of the year
 ## Historical imagery coverage
 
 1. Zoom into Earth until Google Maps opens, then choose **Historical imagery**. The map switches to a modern satellite view for comparison.
-2. The newest available CORONA capture for the map center appears with its acquisition date. **Drag the timeline slider** toward older captures, or toward **Present** to show only the current map.
+2. The newest available image for the map center appears. **Drag the timeline slider** toward older available Wayback releases and CORONA captures, or toward **Present** to show only the current map. The panel shows how many images were found for the location.
 3. Adjust the **Compare with present** slider to change the old image's opacity. Pan to another location to refresh the available dates and images.
 
-The app verifies that image pixels exist at the map center before offering a date. CORONA Atlas coverage is limited and does not provide annual images for every place in the world. If no image is available, the panel says so and offers a verified 1967 example in Cyprus. The overlay and coverage lookup require the University of Arkansas CAST imagery service to be available.
+The app looks for Wayback releases whose image changed at the map center and verifies actual CORONA image pixels before offering a capture. Wayback dates on the slider are **archive release dates**; the image acquisition date is shown separately when metadata is available. Imagery is not available for every year, and dates vary by location. CORONA Atlas coverage is limited; the panel offers a verified 1967 example in Cyprus. The overlays and lookups require Esri and University of Arkansas imagery services.
 
-Imagery: [CAST CORONA Atlas](https://cast.uark.edu/capabilities/corona.php), University of Arkansas. The compact block/date index is derived from [Iconem's historical imagery catalog](https://github.com/Iconem/terrain-viewer/blob/main/lib/corona-atlas-blocks.json). CAST makes its imagery available for **non-commercial use**; confirm permission before using this feature on a commercial site.
+Imagery: [Esri World Imagery Wayback](https://livingatlas.arcgis.com/wayback/) and [CAST CORONA Atlas](https://cast.uark.edu/capabilities/corona.php), University of Arkansas. The compact CORONA block/date index is derived from [Iconem's historical imagery catalog](https://github.com/Iconem/terrain-viewer/blob/main/lib/corona-atlas-blocks.json). CAST makes its CORONA imagery available for **non-commercial use**; confirm permission before using those images on a commercial site. Esri imagery is subject to its own usage and attribution terms.
 
 ## Technology
 

@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { availableCoronaImages, coronaTileUrl, type CoronaImage } from "@/lib/corona";
+import { availableWaybackImages, waybackCaptureMetadata, waybackTileUrl, type WaybackItem, type WaybackMetadata } from "@/lib/wayback";
 
-type Position = { lat: number; lng: number };
+type Position = { lat: number; lng: number; zoom: number };
+type TimelineEntry =
+  | { key: string; date: string; kind: "corona"; image: CoronaImage }
+  | { key: string; date: string; kind: "wayback"; image: WaybackItem };
 
 function formatDate(date: string) {
   return new Date(`${date}T00:00:00Z`).toLocaleDateString("ar-BH", {
@@ -11,14 +15,24 @@ function formatDate(date: string) {
   });
 }
 
+function formatTimestamp(timestamp: number) {
+  return new Date(timestamp).toLocaleDateString("ar-BH", {
+    year: "numeric", month: "long", day: "numeric", timeZone: "UTC",
+  });
+}
+
 export default function HistoricalImageryPanel({ map, onClose }: { map: google.maps.Map | null; onClose: () => void }) {
   const [position, setPosition] = useState<Position | null>(null);
-  const [images, setImages] = useState<CoronaImage[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [coronaImages, setCoronaImages] = useState<CoronaImage[]>([]);
+  const [waybackImages, setWaybackImages] = useState<WaybackItem[]>([]);
+  const [selection, setSelection] = useState("auto");
   const [opacity, setOpacity] = useState(0.8);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [partialFailure, setPartialFailure] = useState(false);
+  const [coronaLoading, setCoronaLoading] = useState(true);
+  const [waybackLoading, setWaybackLoading] = useState(true);
+  const [coronaFailed, setCoronaFailed] = useState(false);
+  const [waybackFailed, setWaybackFailed] = useState(false);
+  const [captureMetadata, setCaptureMetadata] = useState<WaybackMetadata | null>(null);
+  const [metadataResolved, setMetadataResolved] = useState(false);
   const overlayRef = useRef<google.maps.ImageMapType | null>(null);
 
   useEffect(() => {
@@ -26,8 +40,8 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
     const updatePosition = () => {
       const center = map.getCenter();
       if (!center) return;
-      const next = { lat: center.lat(), lng: center.lng() };
-      setPosition((previous) => previous && Math.abs(previous.lat - next.lat) < 0.005 && Math.abs(previous.lng - next.lng) < 0.005
+      const next = { lat: center.lat(), lng: center.lng(), zoom: Math.max(11, Math.min(15, map.getZoom() ?? 13)) };
+      setPosition((previous) => previous && Math.abs(previous.lat - next.lat) < 0.005 && Math.abs(previous.lng - next.lng) < 0.005 && previous.zoom === next.zoom
         ? previous : next);
     };
     updatePosition();
@@ -39,30 +53,28 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
     if (!position) return;
     const controller = new AbortController();
     let disposed = false;
-    const timeout = window.setTimeout(() => controller.abort(), 20000);
-    setImages([]);
-    setSelectedId(null);
-    setLoading(true);
-    setError(null);
-    setPartialFailure(false);
+    const timeout = window.setTimeout(() => controller.abort(), 25000);
+    setCoronaImages([]);
+    setWaybackImages([]);
+    setSelection("auto");
+    setCoronaLoading(true);
+    setWaybackLoading(true);
+    setCoronaFailed(false);
+    setWaybackFailed(false);
 
     availableCoronaImages(position.lat, position.lng, controller.signal)
-      .then(({ images: found, failed }) => {
+      .then(({ images, failed }) => {
         if (disposed) return;
-        if (controller.signal.aborted) {
-          setError("انتهت مهلة الاتصال بأرشيف الصور التاريخية. حاول مرة أخرى بتحريك الخريطة.");
-          return;
-        }
-        if (found.length === 0 && failed > 0) {
-          setError("تعذر التحقق من بعض صور CORONA لهذا الموقع حاليًا. حرّك الخريطة أو حاول لاحقًا.");
-          return;
-        }
-        setImages(found);
-        setSelectedId(found[found.length - 1]?.id ?? null);
-        setPartialFailure(failed > 0);
+        setCoronaImages(images);
+        setCoronaFailed(failed > 0 || controller.signal.aborted);
       })
-      .catch(() => { if (!disposed) setError("تعذر الاتصال بأرشيف الصور التاريخية."); })
-      .finally(() => { if (!disposed) setLoading(false); });
+      .catch(() => { if (!disposed) setCoronaFailed(true); })
+      .finally(() => { if (!disposed) setCoronaLoading(false); });
+
+    availableWaybackImages(position.lat, position.lng, position.zoom, controller.signal)
+      .then((items) => { if (!disposed) setWaybackImages(items); })
+      .catch(() => { if (!disposed) setWaybackFailed(true); })
+      .finally(() => { if (!disposed) setWaybackLoading(false); });
 
     return () => {
       disposed = true;
@@ -71,16 +83,38 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
     };
   }, [position]);
 
-  const selectedImage = images.find((image) => image.id === selectedId);
-  const selectedIndex = selectedImage ? images.indexOf(selectedImage) : images.length;
+  const entries = useMemo<TimelineEntry[]>(() => [
+    ...coronaImages.map((image) => ({ key: `corona:${image.id}`, date: image.date, kind: "corona" as const, image })),
+    ...waybackImages.map((image) => ({ key: `wayback:${image.releaseNum}`, date: image.releaseDateLabel, kind: "wayback" as const, image })),
+  ].sort((a, b) => a.date.localeCompare(b.date) || a.key.localeCompare(b.key)), [coronaImages, waybackImages]);
+
+  const selectedEntry = selection === "auto" ? entries[entries.length - 1] : entries.find((entry) => entry.key === selection);
+  const selectedIndex = selectedEntry ? entries.indexOf(selectedEntry) : entries.length;
+  const selectedRelease = selectedEntry?.kind === "wayback" ? selectedEntry.image.releaseNum : null;
 
   useEffect(() => {
-    if (!map || !selectedImage) return;
+    setCaptureMetadata(null);
+    setMetadataResolved(false);
+    if (!position || selectedRelease === null) return;
+    let disposed = false;
+    const timeout = window.setTimeout(() => {
+      waybackCaptureMetadata(position.lat, position.lng, position.zoom, selectedRelease)
+        .then((metadata) => { if (!disposed) setCaptureMetadata(metadata); })
+        .catch(() => { if (!disposed) setCaptureMetadata(null); })
+        .finally(() => { if (!disposed) setMetadataResolved(true); });
+    }, 250);
+    return () => { disposed = true; window.clearTimeout(timeout); };
+  }, [position, selectedRelease]);
+
+  useEffect(() => {
+    if (!map || !selectedEntry) return;
     const overlay = new google.maps.ImageMapType({
       tileSize: new google.maps.Size(256, 256),
       opacity,
       maxZoom: 22,
-      getTileUrl: (tile, zoom) => coronaTileUrl(selectedImage, tile.x, tile.y, zoom),
+      getTileUrl: (tile, zoom) => selectedEntry.kind === "corona"
+        ? coronaTileUrl(selectedEntry.image, tile.x, tile.y, zoom)
+        : waybackTileUrl(selectedEntry.image, tile.x, tile.y, zoom),
     });
     map.overlayMapTypes.push(overlay);
     overlayRef.current = overlay;
@@ -92,7 +126,7 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
     };
     // Opacity updates the existing overlay without reloading its tiles.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, selectedImage]);
+  }, [map, selectedEntry]);
 
   useEffect(() => { overlayRef.current?.setOpacity(opacity); }, [opacity]);
 
@@ -101,6 +135,8 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
     map.setCenter({ lat: 35.3847, lng: 33.8783 });
     map.setZoom(13);
   };
+
+  const loading = coronaLoading || waybackLoading;
 
   return (
     <section
@@ -111,58 +147,59 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-bold text-sky-200">صور الأرض عبر الزمن</h2>
-          <p className="mt-1 text-xs text-slate-300">صور CORONA الفضائية الأصلية، 1963–1972</p>
+          <p className="mt-1 text-xs text-slate-300">حرّك الشريط لمشاهدة الصور المتاحة لهذا المكان</p>
         </div>
         <button type="button" onClick={onClose} aria-label="إغلاق الصور التاريخية" className="rounded-lg px-2 py-1 text-slate-300 hover:bg-white/10 hover:text-white">✕</button>
       </div>
 
-      {!map || loading ? <p className="py-3 text-sm text-slate-300">جارٍ البحث عن صور متاحة لهذا الموقع…</p> : error ? (
-        <p role="alert" className="py-3 text-sm text-amber-200">{error}</p>
-      ) : images.length === 0 ? (
+      {!map || (loading && entries.length === 0) ? <p className="py-3 text-sm text-slate-300">جارٍ البحث عن صور متاحة لهذا الموقع…</p> : entries.length === 0 ? (
         <div className="space-y-3 py-2 text-sm text-slate-300">
-          <p>لا توجد صورة مؤكدة لمركز الخريطة هنا. تتوفر صور الستينات لمناطق محددة فقط؛ حرّك الخريطة للبحث في مكان آخر.</p>
+          <p>{coronaFailed || waybackFailed ? "تعذّر تحميل بعض الأرشيفات. حرّك الخريطة أو حاول لاحقًا." : "لا توجد صور مؤكدة لمركز الخريطة هنا. حرّك الخريطة للبحث في مكان آخر."}</p>
           <button type="button" onClick={showExample} className="rounded-lg border border-sky-400/40 px-3 py-2 text-xs font-bold text-sky-200 hover:bg-sky-400/10">جرّب صورة متاحة من عام 1967</button>
         </div>
       ) : (
         <div className="space-y-3">
-          <p className="text-xs text-slate-300">{images.length} {images.length === 1 ? "صورة متاحة" : "صور متاحة"} لهذا الموقع</p>
+          <p className="text-xs text-slate-300">{entries.length} {entries.length === 1 ? "صورة متاحة" : "صور متاحة"} لهذا الموقع{loading ? " · جارٍ فحص المزيد…" : ""}</p>
           <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
             <div className="flex items-center justify-between gap-2 text-sm">
-              <strong className="text-sky-200">{selectedImage ? formatDate(selectedImage.date) : "الحاضر"}</strong>
-              <span className="text-xs text-slate-400" dir="ltr">{selectedImage ? `CORONA ${selectedImage.id}` : "Google Maps"}</span>
+              <strong className="text-sky-200">{selectedEntry ? formatDate(selectedEntry.date) : "الحاضر"}</strong>
+              <span className="text-xs text-slate-400" dir="ltr">{selectedEntry?.kind === "corona" ? "CORONA" : selectedEntry?.kind === "wayback" ? "Esri Wayback" : "Google Maps"}</span>
             </div>
-            <p className="mt-3 text-xs text-slate-300">اسحب الشريط بين الحاضر والصور السابقة</p>
+            {selectedEntry?.kind === "wayback" && <p className="mt-1 text-[11px] text-slate-400">تاريخ إصدار الأرشيف · {captureMetadata?.date ? `التُقطت الصورة: ${formatTimestamp(captureMetadata.date)}` : metadataResolved ? "تاريخ الالتقاط غير متاح" : "جارٍ التحقق من تاريخ الالتقاط"}{captureMetadata?.provider ? ` · ${captureMetadata.provider}` : ""}</p>}
+            {selectedEntry?.kind === "corona" && <p className="mt-1 text-[11px] text-slate-400">تاريخ التقاط صورة CORONA</p>}
+            <p className="mt-3 text-xs text-slate-300">اسحب الشريط للرجوع إلى الصور الأقدم أو العودة إلى الحاضر</p>
             <input
               type="range"
               min={0}
-              max={images.length}
+              max={entries.length}
               value={selectedIndex}
               onChange={(event) => {
                 const index = Number(event.target.value);
-                setSelectedId(index === images.length ? null : images[index].id);
+                setSelection(index === entries.length ? "present" : entries[index].key);
               }}
               aria-label="اختيار تاريخ الصورة"
-              aria-valuetext={selectedImage ? formatDate(selectedImage.date) : "الحاضر"}
+              aria-valuetext={selectedEntry ? `${formatDate(selectedEntry.date)}، ${selectedEntry.kind === "corona" ? "CORONA" : "إصدار Esri Wayback"}` : "الحاضر"}
               className="mt-2 w-full accent-sky-400"
             />
             <div className="flex justify-between text-[11px] text-slate-400">
-              <span>{images[0].date.slice(0, 4)} · الأقدم</span>
+              <span>{entries[0].date.slice(0, 4)} · الأقدم</span>
               <span>الحاضر</span>
             </div>
           </div>
-          {selectedImage && (
+          {selectedEntry && (
             <label className="flex items-center gap-3 text-xs text-slate-300">
               <span className="shrink-0">مقارنة بالحاضر</span>
               <input type="range" min={0.15} max={1} step={0.05} value={opacity} onChange={(event) => setOpacity(Number(event.target.value))} aria-label="شفافية الصورة التاريخية" className="w-full accent-sky-400" />
             </label>
           )}
-          {partialFailure && <p className="text-xs text-amber-200">تعذر التحقق من بعض الصور الأخرى في الأرشيف.</p>}
+          {(coronaFailed || waybackFailed) && <p className="text-xs text-amber-200">تعذّر التحقق من بعض الصور في الأرشيف؛ التواريخ المعروضة هي المتاحة حاليًا.</p>}
         </div>
       )}
 
       <p className="mt-4 border-t border-white/10 pt-3 text-[11px] leading-relaxed text-slate-400">
-        الصور بالأبيض والأسود وتغطيتها غير مكتملة. المصدر: <a className="text-sky-300 underline" href="https://cast.uark.edu/capabilities/corona.php" target="_blank" rel="noopener noreferrer">أطلس CORONA بجامعة أركنساس</a>؛ الاستخدام غير التجاري فقط.
+        التواريخ المتاحة تختلف حسب الموقع وقد تفصلها سنوات. المصادر: <a className="text-sky-300 underline" href="https://livingatlas.arcgis.com/wayback/" target="_blank" rel="noopener noreferrer">Esri World Imagery Wayback</a> و<a className="text-sky-300 underline" href="https://cast.uark.edu/capabilities/corona.php" target="_blank" rel="noopener noreferrer">أطلس CORONA بجامعة أركنساس</a>. صور CORONA للاستخدام غير التجاري فقط.
       </p>
+      {entries.length > 0 && <button type="button" onClick={showExample} className="mt-2 text-[11px] text-sky-300 underline">الانتقال إلى مثال من عام 1967</button>}
     </section>
   );
 }
