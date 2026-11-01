@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { availableCoronaImages, coronaTileUrl, type CoronaImage } from "@/lib/corona";
-import { availableBahrainImages, bahrainTileView, type BahrainImage } from "@/lib/mapbh";
+import { availableBahrainImages, bahrainImages, bahrainTileView, type BahrainImage } from "@/lib/mapbh";
 import { availableWaybackImages, waybackCaptureMetadata, waybackTileUrl, type WaybackItem, type WaybackMetadata } from "@/lib/wayback";
 
 type Position = { lat: number; lng: number; zoom: number };
@@ -112,7 +112,6 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
     const timeout = window.setTimeout(() => controller.abort(), 25000);
     setCoronaResultKey(null);
     setWaybackResultKey(null);
-    setSelection("present");
     setCoronaLoading(true);
     setWaybackLoading(true);
     setCoronaFailed(false);
@@ -234,6 +233,14 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
 
   const loading = mode === "photo" && (coronaLoading || waybackLoading || coronaResultKey !== positionKey || waybackResultKey !== positionKey);
   const bahrainCount = entries.filter((entry) => entry.kind === "mapbh").length;
+  const archiveOptions = bahrainImages.filter((image) => image.type === mode);
+  const chooseBahrainImage = (image: BahrainImage) => {
+    if (!map) return;
+    const [west, south, east, north] = image.bounds;
+    setSelection(`mapbh:${image.id}`);
+    map.panTo({ lat: (south + north) / 2, lng: (west + east) / 2 });
+    map.setZoom(Math.min(image.maxZoom, Math.max(image.minZoom, 13)));
+  };
   const selectTimelinePosition = (index: number) => {
     setSelection(index === entries.length ? "present" : entries[index].key);
   };
@@ -257,6 +264,23 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
         <button type="button" aria-pressed={mode === "map"} onClick={() => { setMode("map"); setSelection("present"); }} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${mode === "map" ? "bg-sky-500 text-slate-950" : "border border-sky-400/30 text-sky-200"}`}>خرائط قديمة</button>
       </div>
 
+      {map && <div className="mb-3 space-y-1.5">
+        <label htmlFor="bahrain-archive-layer" className="block text-xs text-slate-300">تصفح جميع طبقات البحرين المنشورة ({archiveOptions.length})</label>
+        <select
+          id="bahrain-archive-layer"
+          value={selectedEntry?.kind === "mapbh" ? selectedEntry.image.id : ""}
+          onChange={(event) => {
+            const image = archiveOptions.find((item) => item.id === event.currentTarget.value);
+            if (image) chooseBahrainImage(image);
+          }}
+          className="w-full rounded-lg border border-sky-400/30 bg-slate-900 px-2 py-2 text-xs text-white"
+        >
+          <option value="">اختر طبقة للانتقال إلى موقعها</option>
+          {archiveOptions.map((image) => <option key={image.id} value={image.id}>{image.date} · {image.name}</option>)}
+        </select>
+        {mode === "map" && <button type="button" onClick={() => chooseBahrainImage(archiveOptions[0])} className="text-xs text-sky-300 underline">انتقل إلى أقدم خريطة منشورة (1862)</button>}
+      </div>}
+
       {!map || (loading && entries.length === 0) ? <p className="py-3 text-sm text-slate-300">جارٍ البحث عن صور متاحة لهذا الموقع…</p> : entries.length === 0 ? (
         <div className="space-y-3 py-2 text-sm text-slate-300">
           <p>{mode === "photo" && (coronaFailed || waybackFailed) ? "تعذّر تحميل بعض الأرشيفات. حرّك الخريطة أو حاول لاحقًا." : "لا توجد طبقة متاحة لمركز الخريطة هنا. حرّك الخريطة للبحث في مكان آخر."}</p>
@@ -269,11 +293,12 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
           <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
             <div className="flex items-center justify-between gap-2 text-sm">
               <strong className="text-sky-200">{selectedEntry ? formatDate(selectedEntry.date) : "الحاضر"}</strong>
-              <span className="text-xs text-slate-400" dir="ltr">{selectedEntry?.kind === "corona" ? "CORONA" : selectedEntry?.kind === "mapbh" ? selectedEntry.image.type === "photo" ? "mapBH / USGS" : "mapBH / Fairey" : selectedEntry?.kind === "wayback" ? "Esri Wayback" : "Google Maps"}</span>
+              <span className="text-xs text-slate-400" dir="ltr">{selectedEntry?.kind === "corona" ? "CORONA" : selectedEntry?.kind === "mapbh" ? "mapBH" : selectedEntry?.kind === "wayback" ? "Esri Wayback" : "Google Maps"}</span>
             </div>
+            {selectedEntry?.kind === "mapbh" && <p className="mt-1 text-xs text-slate-200"><span dir="ltr" className="inline-block">{selectedEntry.image.name}</span> · <a className="text-sky-300 underline" href={`https://map.mapbh.org/data/${encodeURIComponent(selectedEntry.image.id)}.json`} target="_blank" rel="noopener noreferrer">بيانات الطبقة الأصلية</a></p>}
             {selectedEntry?.kind === "wayback" && <p className="mt-1 text-[11px] text-slate-400">تاريخ إصدار الأرشيف · {captureMetadata?.date ? `التُقطت الصورة: ${formatTimestamp(captureMetadata.date)}` : metadataResolved ? "تاريخ الالتقاط غير متاح" : "جارٍ التحقق من تاريخ الالتقاط"}{captureMetadata?.provider ? ` · ${captureMetadata.provider}` : ""}</p>}
             {selectedEntry?.kind === "corona" && <p className="mt-1 text-[11px] text-slate-400">تاريخ التقاط صورة CORONA</p>}
-            {selectedEntry?.kind === "mapbh" && <p className="mt-1 text-[11px] text-slate-400">{selectedEntry.image.type === "photo" ? "تاريخ التقاط صورة فضائية للبحرين" : "سنة إصدار خريطة مرسومة للبحرين"} · التغطية محدودة بحدود المصدر{mapZoom > selectedEntry.image.maxZoom ? ` · الصورة مكبّرة من مستوى ${selectedEntry.image.maxZoom} وقد تقل حدتها` : ""}{mapZoom < selectedEntry.image.minZoom ? ` · كبّر الخريطة إلى مستوى ${selectedEntry.image.minZoom} لعرضها` : ""}</p>}
+            {selectedEntry?.kind === "mapbh" && <p className="mt-1 text-[11px] text-slate-400">{selectedEntry.image.type === "photo" ? selectedEntry.image.date.length === 4 ? "سنة طبقة الصور في الأرشيف؛ يوم الالتقاط غير مؤكد" : "تاريخ التقاط الصورة بحسب فهرس mapBH" : "سنة الخريطة بحسب فهرس mapBH"} · التغطية محدودة بحدود المصدر{mapZoom > selectedEntry.image.maxZoom ? ` · الصورة مكبّرة من مستوى ${selectedEntry.image.maxZoom} وقد تقل حدتها` : ""}{mapZoom < selectedEntry.image.minZoom ? ` · كبّر الخريطة إلى مستوى ${selectedEntry.image.minZoom} لعرضها` : ""}</p>}
             <p className="mt-3 text-xs text-slate-300">اسحب الشريط للرجوع إلى الصور الأقدم أو العودة إلى الحاضر</p>
             <input
               type="range"
@@ -284,13 +309,14 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
               onChange={(event) => selectTimelinePosition(Number(event.currentTarget.value))}
               aria-label="اختيار تاريخ الصورة"
               aria-valuetext={selectedEntry ? `${formatDate(selectedEntry.date)}، ${selectedEntry.kind === "corona" ? "CORONA" : selectedEntry.kind === "mapbh" ? selectedEntry.image.type === "photo" ? "صورة فضائية للبحرين" : "خريطة مرسومة للبحرين" : "إصدار Esri Wayback"}` : "الحاضر"}
+              dir="ltr"
               className="mt-2 w-full accent-sky-400"
             />
-            <div className="flex justify-between text-[11px] text-slate-400">
+            <div dir="ltr" className="flex justify-between text-[11px] text-slate-400">
               <span>{entries[0].date.slice(0, 4)} · الأقدم</span>
               <span>الحاضر</span>
             </div>
-            <div className="mt-2 flex justify-between text-[11px]">
+            <div dir="ltr" className="mt-2 flex justify-between text-[11px]">
               <button type="button" onClick={() => setSelection(entries[0].key)} className="text-sky-300 underline">اعرض الأقدم ({entries[0].date.slice(0, 4)})</button>
               <button type="button" onClick={() => setSelection("present")} className="text-sky-300 underline">العودة للحاضر</button>
             </div>
@@ -301,7 +327,7 @@ export default function HistoricalImageryPanel({ map, onClose }: { map: google.m
       )}
 
       <p className="mt-4 border-t border-white/10 pt-3 text-[11px] leading-relaxed text-slate-400">
-        التواريخ المتاحة تختلف حسب الموقع وقد تفصلها سنوات. المصادر: <a className="text-sky-300 underline" href="https://www.mapbh.org/en/map" target="_blank" rel="noopener noreferrer">mapBH / USGS وFairey Surveys</a>، <a className="text-sky-300 underline" href="https://livingatlas.arcgis.com/wayback/" target="_blank" rel="noopener noreferrer">Esri World Imagery Wayback</a> و<a className="text-sky-300 underline" href="https://cast.uark.edu/capabilities/corona.php" target="_blank" rel="noopener noreferrer">أطلس CORONA بجامعة أركنساس</a>. صور أطلس CORONA للاستخدام غير التجاري فقط.
+        التواريخ المتاحة تختلف حسب الموقع وقد تفصلها سنوات. أقدم خريطة مصوّرة قابلة للعرض هنا من 1862؛ توجد خرائط أقدم في <a className="text-sky-300 underline" href="https://www.mapbh.org/secure/catalogue" target="_blank" rel="noopener noreferrer">فهرس mapBH</a> لم تُنشر كطبقات تفاعلية. المصادر: <a className="text-sky-300 underline" href="https://map.mapbh.org/" target="_blank" rel="noopener noreferrer">طبقات mapBH</a>، <a className="text-sky-300 underline" href="https://livingatlas.arcgis.com/wayback/" target="_blank" rel="noopener noreferrer">Esri World Imagery Wayback</a> و<a className="text-sky-300 underline" href="https://cast.uark.edu/capabilities/corona.php" target="_blank" rel="noopener noreferrer">أطلس CORONA بجامعة أركنساس</a>. صور أطلس CORONA للاستخدام غير التجاري فقط.
       </p>
     </section>
   );

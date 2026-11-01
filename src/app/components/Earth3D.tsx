@@ -320,6 +320,7 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
   const droppedPinMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const myLocationMarkerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const directionsRendererRef = useRef<google.maps.DirectionsRenderer | null>(null);
+  const streetViewRequestRef = useRef(0);
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -334,8 +335,65 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
   const [droppedPin, setDroppedPin] = React.useState<DroppedPin | null>(null);
   const [showRoutePanel, setShowRoutePanel] = React.useState(false);
   const [historicalOpen, setHistoricalOpen] = React.useState(false);
+  const [streetViewOpen, setStreetViewOpen] = React.useState(false);
+  const [streetViewLoading, setStreetViewLoading] = React.useState(false);
+  const [streetViewError, setStreetViewError] = React.useState<string | null>(null);
 
   useEffect(() => { if (!active) setHistoricalOpen(false); }, [active]);
+
+  useEffect(() => {
+    if (!mapInstance) return;
+    const panorama = mapInstance.getStreetView();
+    const listener = panorama.addListener("visible_changed", () => setStreetViewOpen(panorama.getVisible()));
+    return () => listener.remove();
+  }, [mapInstance]);
+
+  useEffect(() => {
+    if (active) return;
+    streetViewRequestRef.current += 1;
+    mapRef.current?.getStreetView().setVisible(false);
+    setStreetViewOpen(false);
+    setStreetViewLoading(false);
+    setStreetViewError(null);
+  }, [active]);
+
+  const toggleStreetView = async () => {
+    const map = mapRef.current;
+    if (!map) return;
+    const panorama = map.getStreetView();
+    if (panorama.getVisible()) {
+      streetViewRequestRef.current += 1;
+      panorama.setVisible(false);
+      setStreetViewOpen(false);
+      setStreetViewError(null);
+      return;
+    }
+
+    const target = droppedPin
+      ? { lat: droppedPin.lat, lng: droppedPin.lng }
+      : placeDetails?.location ?? map.getCenter()?.toJSON();
+    if (!target) return;
+    const requestId = ++streetViewRequestRef.current;
+    setStreetViewLoading(true);
+    setStreetViewError(null);
+    try {
+      const { StreetViewService } = await google.maps.importLibrary("streetView") as google.maps.StreetViewLibrary;
+      const { data } = await new StreetViewService().getPanorama({ location: target, radius: 500 });
+      if (requestId !== streetViewRequestRef.current) return;
+      const panoId = data.location?.pano;
+      if (!panoId) throw new Error("Street View panorama has no ID");
+      setHistoricalOpen(false);
+      panorama.setPano(panoId);
+      panorama.setVisible(true);
+      setStreetViewOpen(true);
+    } catch {
+      if (requestId === streetViewRequestRef.current) {
+        setStreetViewError("تعذّر عرض صور 360° لهذا الموقع. اختر شارعًا آخر أو حرّك الخريطة وحاول مجددًا.");
+      }
+    } finally {
+      if (requestId === streetViewRequestRef.current) setStreetViewLoading(false);
+    }
+  };
 
   // فتح/إغلاق لوحة المسار مع تزامن الـ store
   const openRoutePanel = () => { setShowRoutePanel(true); setRouteActive(true); };
@@ -557,8 +615,11 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
           <button onClick={() => { if (historicalOpen) { setHistoricalOpen(false); setMapType("roadmap"); } else setMapType(mapType === "roadmap" ? "hybrid" : "roadmap"); }} className="w-full rounded-lg py-1.5 text-xs font-bold text-sky-200 transition-colors hover:bg-sky-400/15 flex items-center justify-center gap-1" style={{ border: "1px solid rgba(56,189,248,0.24)", cursor: "pointer" }}>
             {historicalOpen ? "🗺️ خريطة طرق" : mapType === "roadmap" ? "🛰️ قمر صناعي" : "🗺️ خريطة طرق"}
           </button>
-          <button type="button" disabled={!mapInstance} onClick={() => setHistoricalOpen((open) => !open)} aria-expanded={historicalOpen} className="w-full rounded-lg py-1.5 text-xs font-bold text-sky-200 transition-colors hover:bg-sky-400/15 disabled:cursor-not-allowed disabled:opacity-50" style={{ border: "1px solid rgba(56,189,248,0.24)", cursor: mapInstance ? "pointer" : "not-allowed" }}>
+          <button type="button" disabled={!mapInstance} onClick={() => { streetViewRequestRef.current += 1; mapRef.current?.getStreetView().setVisible(false); setStreetViewLoading(false); setStreetViewError(null); setHistoricalOpen((open) => !open); }} aria-expanded={historicalOpen} className="w-full rounded-lg py-1.5 text-xs font-bold text-sky-200 transition-colors hover:bg-sky-400/15 disabled:cursor-not-allowed disabled:opacity-50" style={{ border: "1px solid rgba(56,189,248,0.24)", cursor: mapInstance ? "pointer" : "not-allowed" }}>
             🕰️ {historicalOpen ? "إغلاق الصور القديمة" : "صور تاريخية"}
+          </button>
+          <button type="button" disabled={!mapInstance || streetViewLoading} onClick={toggleStreetView} aria-pressed={streetViewOpen} className="w-full rounded-lg py-1.5 text-xs font-bold text-sky-200 transition-colors hover:bg-sky-400/15 disabled:cursor-not-allowed disabled:opacity-50" style={{ border: "1px solid rgba(56,189,248,0.24)", cursor: mapInstance && !streetViewLoading ? "pointer" : "not-allowed" }}>
+            {streetViewLoading ? "جارٍ البحث عن صور 360°…" : streetViewOpen ? "إغلاق عرض 360°" : "📷 عرض Google 360°"}
           </button>
           <button onClick={onClose} className="w-full rounded-lg py-1.5 text-xs font-bold text-sky-200 transition-colors hover:bg-sky-400/15 flex items-center justify-center gap-1" style={{ border: "1px solid rgba(56,189,248,0.24)", cursor: "pointer" }}>
             🌍 رجوع للأرض
@@ -567,8 +628,11 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
         <div className="rounded-xl px-3 py-2" style={{ background: "rgba(6,13,26,0.80)", backdropFilter: "blur(12px)", border: "1px solid rgba(56,189,248,0.12)" }}>
           <p className="text-sky-300/50 text-[10px] leading-relaxed text-center" style={{ direction: "rtl" }}>💡 انقر مرتين أو اضغط مطولاً لوضع دبوس</p>
           <p className="text-sky-300/40 text-[10px] text-center" style={{ direction: "rtl" }}>انقر على مكان لعرض معلوماته</p>
+          <p className="text-sky-300/40 text-[10px] text-center" style={{ direction: "rtl" }}>عرض 360° يستخدم الدبوس أو المكان المحدد، وإلا مركز الخريطة</p>
         </div>
       </div>
+
+      {streetViewError && active && <div role="status" className="absolute bottom-6 left-1/2 z-30 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 rounded-xl border border-amber-400/40 bg-slate-950/95 px-4 py-3 text-center text-sm text-amber-100 shadow-xl" dir="rtl">{streetViewError}</div>}
 
       {historicalOpen && active && (
         <Suspense fallback={null}>
@@ -577,12 +641,12 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
       )}
 
       {/* لوحة معلومات المكان */}
-      {(isLoadingPlace || placeDetails) && (
+      {!streetViewOpen && (isLoadingPlace || placeDetails) && (
         <PlaceInfoPanel details={placeDetails} isLoading={isLoadingPlace} onClose={() => { setPlaceDetails(null); setIsLoadingPlace(false); }} onNavigate={openRoutePanel} />
       )}
 
       {/* لوحة الدبوس */}
-      {droppedPin && !showRoutePanel && !placeDetails && !isLoadingPlace && (
+      {!streetViewOpen && droppedPin && !showRoutePanel && !placeDetails && !isLoadingPlace && (
         <div className="absolute bottom-4 left-1/2 z-30" style={{ transform: "translateX(-50%)", width: "min(380px, calc(100vw - 2rem))", direction: "rtl" }}>
           <div className="rounded-2xl p-4 space-y-3" style={{ background: "rgba(5,10,22,0.94)", backdropFilter: "blur(28px)", border: "1px solid rgba(99,102,241,0.3)", boxShadow: "0 24px 80px rgba(0,0,0,0.7)" }}>
             <div className="flex items-center justify-between">
@@ -617,7 +681,7 @@ function GoogleRoadMapOverlay({ active, center, onClose }: { active: boolean; ce
       )}
 
       {/* لوحة المسار */}
-      {showRoutePanel && routeDestination && (
+      {!streetViewOpen && showRoutePanel && routeDestination && (
         <RoutePanel destinationName={routeDestination.name} destinationLat={routeDestination.lat} destinationLng={routeDestination.lng} onClose={clearRoute} />
       )}
 
